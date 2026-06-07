@@ -1,0 +1,14 @@
+{
+	"name": "ion",
+	"workspaces": [
+		"core",
+		"test-app",
+		"http"
+	],
+	"devDependencies": {
+		"@tsconfig/strictest": "^2.0.8",
+		"@types/node": "^25.9.2",
+		"reflect-metadata": "^0.2.2",
+		"typescript": "^6.0.3"
+	}
+}

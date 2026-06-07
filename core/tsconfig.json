@@ -1,0 +1,19 @@
+{
+	"compilerOptions": {
+		"rootDir": "./src",
+		"outDir": "./lib",
+		"module": "nodenext",
+		"target": "esnext",
+		"allowSyntheticDefaultImports": true,
+		"declaration": true,
+		"declarationDir": "./types",
+		"emitDecoratorMetadata": true,
+		"experimentalDecorators": true,
+		"stripInternal": true,
+		"inlineSourceMap": true,
+		"types": [
+			"node"
+		]
+	},
+	"extends": "@tsconfig/strictest/tsconfig.json"
+}

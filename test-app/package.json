@@ -1,0 +1,16 @@
+{
+	"name": "test-app",
+	"version": "0.0.1",
+	"main": "dist/index.js",
+	"scripts": {
+		"build": "tsc",
+		"watch": "tsc -w"
+	},
+	"author": "Dimitri Lilov",
+	"license": "MIT",
+	"type": "module",
+	"dependencies": {
+		"@ion/core": "^0.0.1",
+		"@ion/http": "^0.0.1"
+	}
+}

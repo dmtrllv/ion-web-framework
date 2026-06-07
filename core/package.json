@@ -1,0 +1,25 @@
+{
+	"name": "@ion/core",
+	"version": "0.0.1",
+	"description": "An opinionated architecture/framework. (ion reads as puzzle beacuse every piece should fit like a puzle like its ment to be.)",
+	"author": "Dimitri Lilov",
+	"license": "MIT",
+	"type": "module",
+	"scripts": {
+		"build": "tsc",
+		"watch": "tsc -w"
+	},
+	"files": [
+		"package.json",
+		"tsconfig.json",
+		"src",
+		"lib",
+		"types"
+	],
+	"exports": {
+		".": {
+			"default": "./lib/index.js",
+			"types": "./types/index.d.ts"
+		}
+	}
+}

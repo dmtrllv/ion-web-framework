@@ -1,21 +1,29 @@
-import { HttpController, get, html, param, route } from "@ion/http";
+import { HttpController, body, get, param, post, query, route } from "@ion/http";
 
 @route("/users")
 export class UsersController extends HttpController {
+	private static readonly users: { name: string }[] = [];
 
 	@get("/all")
 	public all() {
-		return [];
+		return UsersController.users.map((u, i) => ({ ...u, id: i }));
 	}
 
 	@get("/:id")
 	public byId(@param(":id") id: number) {
-		return html(`<h1>ById ${id}</h1>`);
+		return UsersController.users[id] || null;
 	}
 
-	
-	@get("/:id/info")
-	public userInfo(@param(":id") id: number) {
-		return html(`<h1>User Info for id: ${id}</h1>`);
+
+	@post("/")
+	public create(@body() name: string) {
+		console.log(name);
+		return UsersController.users.push({ name }) - 1;
+	}
+
+	@get("/queried")
+	public queried(@query() q: any) {
+		console.log(q);
+		return { q };
 	}
 }

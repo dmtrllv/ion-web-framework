@@ -22,7 +22,7 @@ export abstract class Transport<I, O> {
 
 	// creates a parameter decorators that extracts and returns data from the input
 	public static createExtractor<T extends Transport<any, any>, Args extends any[]>(this: new () => T, extractor: Extractor<T, Args>): ExtractorDecorator<T, Args> {
-		const decorator: ExtractorDecorator<T, Args> = (...args: Args) => (target, key, index) => {
+		const decorator: ExtractorDecorator<T, Args> = Object.assign((...args: Args) => (target: any, key: any, index: any) => {
 			let extractors = Reflect.getMetadata(EXTRACTORS, target, key);
 			if (extractors === undefined) {
 				extractors = [];
@@ -34,7 +34,9 @@ export abstract class Transport<I, O> {
 				extractor,
 				paramType: params[index]
 			};
-		};
+		}, {
+			extractor
+		});
 
 		return decorator;
 	}
@@ -54,7 +56,9 @@ type TransportController<T extends Transport<any, any>> = InstanceType<Transport
 
 export type ControllerType<I, O> = new (transport: Transport<I, O>) => Controller<I, O>;
 
-type ExtractorDecorator<T extends Transport<any, any>, Args extends any[]> = <Target extends TransportController<T>, K extends keyof Target & (string | symbol), I>(...args: Args) => (target: Target, key: K, index: I) => any;
+type ExtractorDecorator<T extends Transport<any, any>, Args extends any[]> = (<Target extends TransportController<T>, K extends keyof Target & (string | symbol), I>(...args: Args) => (target: Target, key: K, index: I) => any) & {
+	readonly extractor: Extractor<T, Args>;
+};
 
 type Extractor<T extends Transport<any, any>, Args extends any[]> = (ctx: ExtractorContext<T>, ...args: Args) => any;
 

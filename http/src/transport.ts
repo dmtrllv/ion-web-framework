@@ -1,14 +1,25 @@
 import { RegisteredExtractor, Transport } from "@ion/core";
 import { createServer, IncomingMessage, OutgoingMessage, Server, ServerResponse } from "node:http";
-import { ApiSchema } from "./api.js";
+import { ApiRoutes, ApiSchema } from "./api.js";
 import { Router } from "./router.js";
-import { json, Response } from "./response.js";
-import { posix } from "node:path";
+import { file, json, Response } from "./response.js";
+import { posix, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { parse } from "node:querystring";
+
+export type PublicPath = {
+	path: string;
+	prefix: string;
+}
 
 export type HttpConfig = {
 	port?: string | number;
 	host?: string;
 	api?: ApiSchema<any, any> | undefined;
+	public?: {
+		path: string | PublicPath | (string | PublicPath)[];
+		resolveHtml?: boolean;
+	};
 }
 
 type HttpHandlerKeys<T extends HttpController> = {
@@ -47,7 +58,7 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> {
 		if (!HttpTransport.pathMap.has(ctor))
 			HttpTransport.pathMap.set(ctor, {});
 		HttpTransport.pathMap.get(ctor)![key] = { method, path };
-		HttpTransport.handlers.get.set(path, { controller: ctor, key, extractors: this.getExtractors(controller as any, key as any), path });
+		HttpTransport.handlers[method].set(path, { controller: ctor, key, extractors: this.getExtractors(controller as any, key as any), path });
 	}
 
 	public static readonly get = <T extends HttpController, K extends HttpHandlerKeys<T>>(path: string) => (controller: T, key: K) => {
@@ -81,7 +92,10 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> {
 	private readonly config: Required<HttpConfig> = {
 		host: "127.0.0.1",
 		port: 3001,
-		api: undefined
+		api: undefined,
+		public: {
+			path: []
+		}
 	};
 
 	private port: string | number = 3001;
@@ -100,22 +114,27 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> {
 		return posix.join(base, p);
 	}
 
+	public resolveMethod(controller: HttpControllerCtor, key: string | symbol): HttpMethod | undefined {
+		return HttpTransport.pathMap.get(controller)?.[key]?.method;
+	}
+
 	private async onRequest(req: IncomingMessage, res: ServerResponse) {
-		const { method, url } = req;
-		if (!url || !method)
+		const { method } = req;
+		if (!req.url || !method)
 			return res.end();
 
+		const [url] = req.url.split("?") as [string];
+	
 		const handler = this.router.resolve(method.toLowerCase() as HttpMethod, url);
 
 		if (handler === null) {
-			res.statusCode = 404;
-			return res.end();
+			return this.resolvePublicPath(url, res);
 		}
 
 		const controller = new handler.controller();
-		const fn = controller[handler.key as keyof typeof controller] as Function;
+		const fn = (controller[handler.key as keyof typeof controller]as Function).bind(controller);
 		try {
-			const args = handler.extractors.map(e => {
+			const args = await Promise.all(handler.extractors.map(e => {
 				if (e === undefined) {
 					return e;
 				}
@@ -126,8 +145,9 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> {
 					key: handler.key,
 					paramType: e.paramType
 				};
+				//console.log(e.extractor === param.extractor);
 				return e.extractor(ctx, ...e.args);
-			});
+			}));
 			const response = await fn(...args);
 			if (response === undefined) {
 				return res.end();
@@ -138,12 +158,62 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> {
 			} else if (typeof response === "string") {
 				res.write(response);
 			} else {
-				await json(response).write(res);
+				await json({ data: response }).write(res);
 			}
 		} catch (e) {
-			console.log({ error: e });
+			console.error(e);
+			await json({ error: e }).write(res);
 		}
 
+		return res.end();
+	}
+
+	private findPublicFile(paths: (string | PublicPath)[], path: string) {
+		for (const p of paths) {
+			if (typeof p === "string") {
+				const filePath = resolve(p, path);
+				if (existsSync(filePath))
+					return filePath;
+			} else {
+				const prefix = p.prefix.startsWith("/") ? p.prefix.substring(1) : p.prefix;
+				if (path.startsWith(prefix)) {
+					const filePath = resolve(p.path, path.substring(p.prefix.length));
+					if (existsSync(filePath))
+						return filePath
+				}
+			}
+		}
+		return undefined;
+	}
+
+
+	private async resolvePublicPath(url: string, res: ServerResponse<IncomingMessage>) {
+		const paths = Array.isArray(this.config.public.path) ? this.config.public.path : [this.config.public.path];
+
+		if (this.config.public.resolveHtml && url === "/") {
+			const filePath = this.findPublicFile(paths, "index.html");
+			if (filePath) {
+				await file(filePath).write(res);
+				return res.end();
+			}
+		}
+
+		const filePath = this.findPublicFile(paths, url.substring(1));
+
+		if (filePath) {
+			await file(filePath).write(res);
+			return res.end();
+		} else {
+			if (this.config.public.resolveHtml) {
+				const filePath = this.findPublicFile(paths, url.substring(1) + ".html");
+				if (filePath) {
+					await file(filePath).write(res);
+					return res.end();
+				}
+			}
+		}
+
+		res.statusCode = 404;
 		return res.end();
 	}
 
@@ -157,6 +227,68 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> {
 				this.router.register(m, p, r);
 			}
 		}
+
+		if (this.config.api) {
+			this.configureApi(this.config.api);
+		}
+	}
+
+	private configureApi(api: ApiSchema<any, any>) {
+		// TODO: cleanup
+		const walk = (target: ApiRoutes) => {
+			const json: any = {};
+			for (const k in target) {
+				const v = target[k]!;
+				if (typeof v === "function") {
+
+					const x = HttpTransport.pathMap.get(v);
+					if (!x)
+						continue;
+
+					json[k] = {};
+
+					for (const key in x) {
+						const { method } = x[key]!;
+						const p = this.resolvePath(v, key)!;
+						if (!p)
+							continue;
+						const y = this.router.resolve(method, p);
+						if (y)
+							json[k][key] = {
+								path: p,
+								method,
+								args: y.extractors.map(e => {
+									if (e.extractor === body.extractor) {
+										return "body";
+									} else if (e.extractor === param.extractor) {
+										return { param: e.args[0] };
+									} else {
+										return null;
+									}
+								})
+							};
+					}
+				} else {
+					json[k] = walk(v);
+				}
+			}
+			return json;
+		};
+
+		const apiSchema = walk(api.routes);
+
+		this.router.register("get", api.path, {
+			controller: class extends HttpController {
+				get() {
+					return json(apiSchema);
+				}
+			},
+			extractors: [],
+			key: "get",
+			path: api.path
+		});
+
+		console.log(JSON.stringify(apiSchema, null, 4));
 	}
 
 	override start(): void | Promise<void> {
@@ -210,4 +342,13 @@ export const param = HttpTransport.createExtractor(({ controller, transport, key
 	if (param === undefined)
 		throw new Error(`Url does not matches param or path!`);
 	return param;
+});
+
+export const query = HttpTransport.createExtractor(({ input }) => {
+	const str = input.url!.split("?")[1];
+
+	if (str === undefined)
+		return {};
+	
+	return parse(str);
 });

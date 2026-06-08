@@ -4,7 +4,8 @@
 	"main": "dist/index.js",
 	"scripts": {
 		"build": "tsc",
-		"watch": "tsc -w"
+		"watch": "tsc -w",
+		"dev": "nodemon"
 	},
 	"author": "Dimitri Lilov",
 	"license": "MIT",
@@ -12,5 +13,17 @@
 	"dependencies": {
 		"@ion/core": "^0.0.1",
 		"@ion/http": "^0.0.1"
+	},
+	"devDependencies": {
+		"nodemon": "^3.1.14"
+	},
+	"nodemonConfig": {
+		"watch": [
+			"src",
+			"../core/lib",
+			"../http/lib"
+		],
+		"ext": "js,jsx,ts,tsx,json",
+		"exec": "npm run build && node ."
 	}
 }

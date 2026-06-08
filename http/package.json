@@ -22,6 +22,10 @@
 		".": {
 			"default": "./lib/index.js",
 			"types": "./types/index.d.ts"
+		},
+		"./client": {
+			"default": "./lib/client.js",
+			"types": "./types/client.d.ts"
 		}
 	}
 }

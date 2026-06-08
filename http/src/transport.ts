@@ -262,6 +262,8 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> {
 										return "body";
 									} else if (e.extractor === param.extractor) {
 										return { param: e.args[0] };
+									} else if(e.extractor === query.extractor) {
+										return "query";
 									} else {
 										return null;
 									}

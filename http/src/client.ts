@@ -28,7 +28,7 @@ export const clientApi = async <T extends ApiSchema<any, any>>(path: ApiSchemaPa
 };
 
 const createApiHandler = (val: ApiMeta): any => {
-	const parsePath = (...args: any[]) => {
+	const createPath = (...args: any[]) => {
 		let parts = val.path.split("/");
 
 		val.args.forEach((arg, i) => {
@@ -42,8 +42,7 @@ const createApiHandler = (val: ApiMeta): any => {
 		return parts.join("/");
 	};
 
-	const parseBody = (...args: any[]) => {
-		console.log(val.args, args);
+	const serializeBody = (...args: any[]) => {
 		const index = val.args.indexOf("body");
 		if (index > -1) {
 			return JSON.stringify(args[index]);
@@ -51,18 +50,29 @@ const createApiHandler = (val: ApiMeta): any => {
 		return null;
 	};
 
-	const parseQuery = (...args: any[]) => {
+	const serializeQuery = (...args: any[]) => {
 		const index = val.args.indexOf("query");
 		if (index > -1) {
-			return new URLSearchParams(args[index]).toString();
+			const params = new URLSearchParams();
+			const obj = args[index];
+			for (const key in obj) {
+				const value = obj[key];
+
+				if (Array.isArray(value)) {
+					value.forEach(v => params.append(key, v));
+				} else {
+					params.append(key, value);
+				}
+			}
+			return params.toString();
 		}
 		return undefined;
 	};
 
 	return async (...args: any[]) => {
-		const path = parsePath(...args);
-		const body = parseBody(...args);
-		const query = parseQuery(...args);
+		const path = createPath(...args);
+		const body = serializeBody(...args);
+		const query = serializeQuery(...args);
 		const headers: HeadersInit = {};
 
 		if (body !== null) {

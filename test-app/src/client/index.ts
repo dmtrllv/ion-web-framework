@@ -1,5 +1,7 @@
 import { api } from "./api.js";
 
+import "./home.js";
+
 const users = document.getElementById("users-list");
 
 const addUser = (id: number, name: string) => {

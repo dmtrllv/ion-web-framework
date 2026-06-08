@@ -3,7 +3,8 @@
 	"workspaces": [
 		"core",
 		"test-app",
-		"http"
+		"http",
+		"ws"
 	],
 	"devDependencies": {
 		"@tsconfig/strictest": "^2.0.8",

@@ -1,4 +1,4 @@
-import { RegisteredExtractor, Transport } from "@ion/core";
+import { RegisteredExtractor, Transport, UpgradableTransport, UpgradeHandler } from "@ion/core";
 import { createServer, IncomingMessage, OutgoingMessage, Server, ServerResponse } from "node:http";
 import { ApiRoutes, ApiSchema } from "./api.js";
 import { Router } from "./router.js";
@@ -41,7 +41,7 @@ export type HttpMethod =
 	| "put"
 	| "delete";
 
-export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> {
+export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> implements UpgradableTransport<[IncomingMessage]> {
 	private static readonly handlers: Record<HttpMethod, Map<string, RouteMeta<any, any>>> = {
 		get: new Map(),
 		post: new Map(),
@@ -89,6 +89,8 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> {
 
 	private readonly router = new Router();
 
+	private readonly onUpgradeHandlers: UpgradeHandler<[IncomingMessage]>[] = [];
+
 	private readonly config: Required<HttpConfig> = {
 		host: "127.0.0.1",
 		port: 3001,
@@ -104,6 +106,10 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> {
 	constructor() {
 		super();
 		this.server = createServer(this.onRequest.bind(this));
+	}
+
+	public onUpgrade(handler: UpgradeHandler<[IncomingMessage]>): void {
+		this.onUpgradeHandlers.push(handler);
 	}
 
 	public resolvePath(controller: HttpControllerCtor, key: string | symbol): string | undefined {

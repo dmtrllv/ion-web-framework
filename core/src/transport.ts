@@ -48,8 +48,8 @@ export abstract class Transport<I, O> {
 	public constructor() { }
 
 	public abstract configure(config?: any): void | Promise<void>;
-	public abstract start(): void | Promise<void>;
-	public abstract stop(): void | Promise<void>;
+	public start(): void | Promise<void> {}
+	public stop(): void | Promise<void> {}
 }
 
 type TransportController<T extends Transport<any, any>> = InstanceType<TransportControllerCtor<T>>;
@@ -93,3 +93,8 @@ export class Controller<I, O> {
 	}
 }
 
+export interface UpgradableTransport<Args extends any[]> {
+	onUpgrade(handler: UpgradeHandler<Args>): void;
+}
+
+export type UpgradeHandler<Args extends any[]> = (...args: Args) => void;

@@ -1,11 +1,12 @@
 import { App } from "@ion/core";
 import { HttpTransport } from "@ion/http";
-import { api } from "./http/index.js";
+import { WsTransport } from "@ion/ws";
+import { api } from "./controllers/index.js";
 import { resolve } from "node:path";
 
 export const app = new App();
 
-app.use(HttpTransport, {
+const httpServer = app.use(HttpTransport, {
 	api,
 	public: {
 		path: [
@@ -18,6 +19,10 @@ app.use(HttpTransport, {
 		],
 		resolveHtml: true,
 	}
+});
+
+app.use(WsTransport, {
+	server: httpServer
 });
 
 await app.start();

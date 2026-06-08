@@ -12,7 +12,8 @@
 	"type": "module",
 	"dependencies": {
 		"@ion/core": "^0.0.1",
-		"@ion/http": "^0.0.1"
+		"@ion/http": "^0.0.1",
+		"@ion/ws": "^0.0.1"
 	},
 	"devDependencies": {
 		"nodemon": "^3.1.14"
@@ -21,7 +22,8 @@
 		"watch": [
 			"src",
 			"../core/lib",
-			"../http/lib"
+			"../http/lib",
+			"../ws/lib"
 		],
 		"ext": "js,jsx,ts,tsx,json",
 		"exec": "npm run build && node ."

@@ -1,0 +1,32 @@
+{
+	"name": "@ion/ws",
+	"version": "0.0.1",
+	"author": "Dimitri Lilov",
+	"license": "MIT",
+	"type": "module",
+	"scripts": {
+		"build": "tsc",
+		"watch": "tsc -w"
+	},
+	"dependencies": {
+		"@ion/core": "^0.0.1",
+		"@ion/http": "^0.0.1"
+	},
+	"files": [
+		"package.json",
+		"tsconfig.json",
+		"src",
+		"lib",
+		"types"
+	],
+	"exports": {
+		".": {
+			"default": "./lib/index.js",
+			"types": "./types/index.d.ts"
+		},
+		"./client": {
+			"default": "./lib/client.js",
+			"types": "./types/client.d.ts"
+		}
+	}
+}

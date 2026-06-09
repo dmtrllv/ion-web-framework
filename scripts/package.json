@@ -1,0 +1,11 @@
+{
+	"name": "@ion/build-scripts",
+	"version": "0.0.1",
+	"author": "Dimitri Lilov",
+	"license": "MIT",
+	"type": "module",
+	"scripts": {
+		"build": "tsc",
+		"watch": "tsc -w"
+	}
+}

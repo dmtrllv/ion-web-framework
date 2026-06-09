@@ -1,17 +1,18 @@
 declare module "@ion/core" {
 	interface DomainEvents {
-		test: 123;
+		broadcastMessage: { username: string; message: string; chatRoom: number ; };
+		chatConnected: { username: string, chatRoom: number; };
+		chatDisconnected: { username: string, chatRoom: number; };
 	}
 }
 
-declare module "@ion/ws" {
-	interface ServerEvents {
-		userOnline: number;
-		userOffline: number;
-	}
+//declare module "@ion/ws" {
+//	interface ServerEvents {
+//		userOnline: { username: string; };
+//		userOffline: { username: string; };
+//	}
 	
-	interface ClientEvents {
-		notifyOnline: void;
-		notifyOffline: void;
-	}
-}
+//	interface ClientEvents {
+		
+//	}
+//}

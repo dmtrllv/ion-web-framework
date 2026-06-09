@@ -3,6 +3,10 @@ import type { DomainEvents } from "./events.js";
 import { Service, ServiceType } from "./service.js";
 
 export class App {
+	public static readonly onEvent = <K extends keyof DomainEvents, Target extends Service | Controller<any, any>, Key extends keyof Target>(event: K) => (target: Target, key: Key) => {
+		console.log(event, target, key);
+	}
+
 	private readonly transports = new Map<TransportType<any>, [Transport<any, any>, any]>();
 
 	private readonly services = new Map<ServiceType<any>, Service>();
@@ -35,7 +39,7 @@ export class App {
 			for (const k in props) {
 				const service = props[k]!;
 				if (!this.services.has(service)) {
-					this.services.set(service, new service());
+					this.services.set(service, new service(this));
 				}
 			}
 		}
@@ -64,8 +68,10 @@ export class App {
 		await Promise.all(this.transports.values().map(([transport]) => transport.stop()));
 	}
 
-	public emit(key: keyof DomainEvents) { console.log(key) }
+	public emit<K extends keyof DomainEvents>(event: K, ...[data]: EmitDomainEventArgs<K>) { console.log(event, data) }
 }
+
+type EmitDomainEventArgs<T extends keyof DomainEvents> = [data: DomainEvents[T]];
 
 type TransportType<T extends Transport<any, any>> = abstract new (app: App) => T;
 

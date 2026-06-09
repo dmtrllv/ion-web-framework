@@ -3,48 +3,52 @@ import { createHash } from "node:crypto";
 import { IncomingMessage } from "node:http";
 import Stream from "node:stream";
 import { Socket } from "./socket.js";
-import { ClientEvents, WsSchema } from "./schema.js";
 
 type UpgradeArgs = [req: IncomingMessage, socket: Stream.Duplex, head: Buffer<ArrayBuffer>];
 
 export type WsConfig = {
 	server: UpgradableTransport<UpgradeArgs>;
-	schema: WsSchema;
+	onConnection?: (req: IncomingMessage, socket: Stream.Duplex) => boolean | Promise<boolean>;
+	onClosed?: (req: IncomingMessage, socket: Socket) => void | Promise<void>;
 };
 
-type WsRoute = {
-	controller: WsControllerCtor;
-	args: any[];
-	key: string;
-	event: keyof ClientEvents;
-}
+//type WsRoute = {
+//	controller: WsControllerCtor;
+//	args: any[];
+//	key: string;
+//	event: keyof ClientEvents;
+//}
 
 export class WsTransport extends Transport<any, any> {
 	private static readonly GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-	private static readonly routes = new Map<keyof ClientEvents, WsRoute>();
+	//private static readonly routes = new Map<keyof ClientEvents, WsRoute>();
 
-	public static readonly registerRoute = <K extends keyof ClientEvents>(event: K, controller: WsControllerCtor, key: string, args: any[]) => {
-		if (this.routes.has(event))
-			throw new Error(`Duplicate web socket route for ${event}!`);
-		WsTransport.routes.set(event, {
-			controller,
-			key,
-			args,
-			event
-		});
-	}
+	//public static readonly registerRoute = <K extends keyof ClientEvents>(event: K, controller: WsControllerCtor, key: string, args: any[]) => {
+	//	if (this.routes.has(event))
+	//		throw new Error(`Duplicate web socket route for ${event}!`);
+	//	WsTransport.routes.set(event, {
+	//		controller,
+	//		key,
+	//		args,
+	//		event
+	//	});
+	//}
 
-	public static readonly getRoute = <K extends keyof ClientEvents>(event: K) => {
-		return WsTransport.routes.get(event) || null;
-	}
+	//public static readonly getRoute = <K extends keyof ClientEvents>(event: K) => {
+	//	return WsTransport.routes.get(event) || null;
+	//}
 
 	private readonly sockets: Set<Socket> = new Set();
 
 	private idCounter = 0;
+	private onConnection: ((req: IncomingMessage, socket: Stream.Duplex) => boolean | Promise<boolean>) | undefined;
+	private onClosed: ((req: IncomingMessage, socket: Socket) => void | Promise<void>) | undefined;
 
-	override configure({ server }: WsConfig): void | Promise<void> {
+	override configure({ server, onConnection, onClosed }: WsConfig): void | Promise<void> {
 		server.onUpgrade(this.onUpgrade);
+		this.onConnection = onConnection;
+		this.onClosed = onClosed;
 	}
 
 	private readonly createAcceptValue = (secWebSocketKey: string) => {
@@ -53,7 +57,7 @@ export class WsTransport extends Transport<any, any> {
 			.digest("base64");
 	}
 
-	private readonly onUpgrade = (req: IncomingMessage, socket: Stream.Duplex, _head: Buffer<ArrayBuffer>) => {
+	private readonly onUpgrade = async (req: IncomingMessage, socket: Stream.Duplex, _head: Buffer<ArrayBuffer>) => {
 		const reject = (reason: string) => {
 			console.error(reason);
 			socket.destroy();
@@ -74,6 +78,12 @@ export class WsTransport extends Transport<any, any> {
 			return reject("Missing header \"sec-websocket-key\"!");
 		}
 
+		if (this.onConnection) {
+			if (!await this.onConnection(req, socket)) {
+				return reject("Not allowed to connect!");
+			}
+		}
+
 		const acceptKey = this.createAcceptValue(key);
 
 		socket.write(
@@ -88,7 +98,10 @@ export class WsTransport extends Transport<any, any> {
 
 		this.sockets.add(s);
 
-		socket.on("end", () => {
+		socket.on("end", async () => {
+			if(this.onClosed) {
+				await this.onClosed(req, s);
+			}
 			this.sockets.delete(s);
 		});
 	}
@@ -129,17 +142,21 @@ export class WsTransport extends Transport<any, any> {
 }
 
 
-export const WsController = WsTransport.Controller();
+export const WsController = WsTransport.Controller({
+	without<T extends WsController, K extends (keyof T)[]>(this: new (...args: any[]) => T, ..._keys: K): new (...args: any[]) => Omit<T, K[number]> {
+		return this;
+	}
+});
 
 export type WsControllerCtor = typeof WsController;
 export type WsController = InstanceType<typeof WsController>;
 
-export const ws = <K extends keyof ClientEvents, T extends WsController, Key extends keyof T>(event: K) => (target: T, key: Key): MatchMethod<K, T, Key> => {
-	const args = Reflect.getMetadata("design:paramtypes", target, key as any);
-	WsTransport.registerRoute(event, target.constructor as any, key as any, args);
-	return void (0) as any;
-}
+//export const ws = <K extends keyof ClientEvents, T extends WsController, Key extends keyof T>(event: K) => (target: T, key: Key): MatchMethod<K, T, Key> => {
+//	const args = Reflect.getMetadata("design:paramtypes", target, key as any);
+//	WsTransport.registerRoute(event, target.constructor as any, key as any, args);
+//	return void (0) as any;
+//}
 
-export type MatchMethod<K extends keyof ClientEvents, T extends WsController, Key extends keyof T> =
-	[void] extends [ClientEvents[K]] ? void :
-	T[Key] extends (...args: infer Args) => any ? [Args[0]] extends [ClientEvents[K]] ? void : "Invalid arguments!" : "Invalid arguments!";
+//export type MatchMethod<K extends keyof ClientEvents, T extends WsController, Key extends keyof T> =
+//	[void] extends [ClientEvents[K]] ? void :
+//	T[Key] extends (...args: infer Args) => any ? [Args[0]] extends [ClientEvents[K]] ? void : "Invalid arguments!" : "Invalid arguments!";

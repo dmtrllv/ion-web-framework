@@ -147,7 +147,7 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> i
 		
 		this.app.injectServices(controller);
 
-		const fn = (controller[handler.key as keyof typeof controller] as Function).bind(controller);
+		const fn = (controller[handler.key as keyof typeof controller] as any).bind(controller);
 		try {
 			const args = await Promise.all(handler.extractors.map(e => {
 				if (e === undefined) {

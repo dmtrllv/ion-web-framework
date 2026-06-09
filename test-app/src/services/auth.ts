@@ -3,8 +3,12 @@ import { Service } from "@ion/core";
 export class AuthService extends Service {
 
 
-	public login({ username, password }: LoginData) {
-		console.log(username, password);
+	public async login({ username, password }: LoginData): Promise<boolean> {
+		if(username !== password) {
+			return false;
+		}
+
+		return true;
 	}
 }
 

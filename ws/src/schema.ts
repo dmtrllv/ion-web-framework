@@ -1,24 +1,17 @@
 import { WsControllerCtor } from "./transport.js";
 
-/**
- * Define events send from the server.
- */
-export declare interface ServerEvents {
+export type ServerRoutes = {
+	readonly [key: string]: ServerRoutes | WsControllerCtor;
+};
 
-}
+export const createServerSchema = <const Path extends string, const Routes extends ServerRoutes>(path: Path, routes: Routes): ServerSchema<Path, Routes> => {
+	return {
+		path,
+		routes
+	};
+};
 
-/**
- * Define events send from the client. 
- * This will be used to register ws controller methods to.
- */
-export declare interface ClientEvents {
-
-}
-
-export const createWsSchema = <T extends WsSchema>(schema: T): T => {
-	return schema;
-}
-
-export type WsSchema = {
-	[key: string]: WsControllerCtor | WsSchema;
+export type ServerSchema<Path extends string, Routes extends ServerRoutes> = {
+	readonly path: Path;
+	readonly routes: Routes;
 };

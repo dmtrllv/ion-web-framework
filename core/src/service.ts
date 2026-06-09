@@ -1,3 +1,4 @@
+import { App } from "./app.js";
 import { Controller, ControllerType } from "./transport.js";
 
 export const SERVICE_TAG = Symbol();
@@ -9,20 +10,26 @@ export abstract class Service {
 	public readonly [SERVICE_TAG] = SERVICE_TAG;
 
 	private static readonly registeredServices: ServiceMap = new Map();
-
+	
 	public static getRegisteredServices(): ReadonlyServiceMap {
 		return this.registeredServices;
 	}
-
+	
 	public static readonly register = (target: ControllerType<any, any> | ServiceType<any>, key: string | number | symbol, service: ServiceType<any>) => {
 		const ctor = target.constructor as any;
 		if (!this.registeredServices.has(ctor))
 			this.registeredServices.set(ctor, {});
 		this.registeredServices.get(ctor)![key] = service;
-	};
+	}
+
+	protected readonly app: App;
+	
+	public constructor(app: App) {
+		this.app = app;
+	}
 }
 
-export type ServiceType<T extends Service> = new () => T;
+export type ServiceType<T extends Service> = new (app: App) => T;
 
 export const service = <T extends Controller<any, any> | Service, K extends keyof T>() => (target: T, key: K) => {
 	const type = Reflect.getMetadata("design:type", target, key as any);

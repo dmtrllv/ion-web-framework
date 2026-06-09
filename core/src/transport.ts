@@ -14,12 +14,12 @@ export abstract class Transport<I, O> {
 	declare protected readonly [INPUT_TAG]: I;
 	declare protected readonly [OUTPUT_TAG]: O;
 	
-	public static Controller<T extends Transport<any, any>,>(this: new (app: App) => T): TransportControllerCtor<T> {
+	public static Controller<T extends Transport<any, any>,StaticProps extends {} = {}>(this: new (app: App) => T, staticProps: StaticProps = {} as any): TransportControllerCtor<T> & StaticProps {
 		const className = `${this.name}Controller`;
 		const classObjects: { [key: typeof className]: TransportControllerCtor<T> } = {
 			[className]: class extends Controller<any, any> { } as any
 		};
-		return classObjects[className]!;
+		return Object.assign(classObjects[className]!, staticProps);
 	}
 	
 	// creates a parameter decorators that extracts and returns data from the input
@@ -82,11 +82,11 @@ export type RegisteredExtractor<T extends Transport<any, any>, Args extends any[
 
 type InferInput<T> = T extends Transport<infer I, any> ? I : never;
 
-type TransportControllerCtor<T> = T extends Transport<infer I, infer O> ? ControllerCtor<I, O> : never;
+type TransportControllerCtor<T> = T extends Transport<infer I, infer O> ? ControllerCtor<T, I, O> : never;
 
-type ControllerCtor<I, O> = (new () => Controller<I, O>) & {
+type ControllerCtor<T extends Transport<I, O>, I, O> = (new () => Controller<I, O> & { transport: T }) & {
 	// TODO: Does this work?
-	readonly constructor: ControllerCtor<I, O>;
+	readonly constructor: ControllerCtor<T, I, O>;
 };
 
 export class Controller<I, O> {

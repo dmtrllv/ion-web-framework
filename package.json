@@ -6,6 +6,9 @@
 		"http",
 		"ws"
 	],
+	"scripts": {
+		"dev": "node scripts/dist/dev"
+	},
 	"devDependencies": {
 		"@tsconfig/strictest": "^2.0.8",
 		"@types/node": "^25.9.2",

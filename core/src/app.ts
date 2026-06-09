@@ -1,10 +1,11 @@
 import { Transport } from "./transport.js";
+import type { DomainEvents } from "./events.js";
 
 export class App {
 	private readonly transports = new Map<TransportType<any>, [Transport<any, any>, any]>();
 
 	public use<T extends Transport<any, any>>(...[transport, config]: UseTransportArgs<T>): T {
-		if(this.transports.has(transport)) {
+		if (this.transports.has(transport)) {
 			throw new Error(`Transport ${transport.name} is already registered!`);
 		}
 		const instance = new (transport as any)();
@@ -14,7 +15,7 @@ export class App {
 
 	public getTransport<T extends Transport<any, any>>(type: TransportType<T>): T {
 		const transport = this.transports.get(type);
-		if(!transport)
+		if (!transport)
 			throw new Error(`Could not get transport ${type.name}!`);
 		return transport[0] as T;
 	}
@@ -23,10 +24,12 @@ export class App {
 		await Promise.all(this.transports.values().map(([transport, config]) => transport.configure(config)));
 		await Promise.all(this.transports.values().map(([transport]) => transport.start()));
 	}
-	
+
 	public async stop() {
 		await Promise.all(this.transports.values().map(([transport]) => transport.stop()));
 	}
+
+	public emit(key: keyof DomainEvents) { console.log(key) }
 }
 
 type TransportType<T extends Transport<any, any>> = abstract new () => T;

@@ -6,6 +6,7 @@ import { file, json, Response } from "./response.js";
 import { posix, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { parse } from "node:querystring";
+import Stream from "node:stream";
 
 export type PublicPath = {
 	path: string;
@@ -41,7 +42,9 @@ export type HttpMethod =
 	| "put"
 	| "delete";
 
-export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> implements UpgradableTransport<[IncomingMessage]> {
+type UpgradeArgs = [req: IncomingMessage, socket: Stream.Duplex, head: Buffer<ArrayBuffer>];
+
+export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> implements UpgradableTransport<UpgradeArgs> {
 	private static readonly handlers: Record<HttpMethod, Map<string, RouteMeta<any, any>>> = {
 		get: new Map(),
 		post: new Map(),
@@ -89,7 +92,7 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> i
 
 	private readonly router = new Router();
 
-	private readonly onUpgradeHandlers: UpgradeHandler<[IncomingMessage]>[] = [];
+	private readonly onUpgradeHandlers: UpgradeHandler<UpgradeArgs>[] = [];
 
 	private readonly config: Required<HttpConfig> = {
 		host: "127.0.0.1",
@@ -106,9 +109,12 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> i
 	constructor() {
 		super();
 		this.server = createServer(this.onRequest.bind(this));
+		this.server.on("upgrade", (req, socket, head) => {
+			this.onUpgradeHandlers.forEach(handler => handler(req, socket, head));
+		});
 	}
 
-	public onUpgrade(handler: UpgradeHandler<[IncomingMessage]>): void {
+	public onUpgrade(handler: UpgradeHandler<UpgradeArgs>): void {
 		this.onUpgradeHandlers.push(handler);
 	}
 
@@ -130,7 +136,7 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> i
 			return res.end();
 
 		const [url] = req.url.split("?") as [string];
-	
+
 		const handler = this.router.resolve(method.toLowerCase() as HttpMethod, url);
 
 		if (handler === null) {
@@ -138,7 +144,7 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> i
 		}
 
 		const controller = new handler.controller();
-		const fn = (controller[handler.key as keyof typeof controller]as Function).bind(controller);
+		const fn = (controller[handler.key as keyof typeof controller] as Function).bind(controller);
 		try {
 			const args = await Promise.all(handler.extractors.map(e => {
 				if (e === undefined) {
@@ -268,7 +274,7 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> i
 										return "body";
 									} else if (e.extractor === param.extractor) {
 										return { param: e.args[0] };
-									} else if(e.extractor === query.extractor) {
+									} else if (e.extractor === query.extractor) {
 										return "query";
 									} else {
 										return null;
@@ -357,6 +363,6 @@ export const query = HttpTransport.createExtractor(({ input }) => {
 
 	if (str === undefined)
 		return {};
-	
+
 	return parse(str);
 });

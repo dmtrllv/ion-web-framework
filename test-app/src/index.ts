@@ -26,3 +26,5 @@ app.use(WsTransport, {
 });
 
 await app.start();
+
+app.emit("test");

@@ -1,4 +1,4 @@
-import { RegisteredExtractor, Transport, UpgradableTransport, UpgradeHandler } from "@ion/core";
+import { App, RegisteredExtractor, Transport, UpgradableTransport, UpgradeHandler } from "@ion/core";
 import { createServer, IncomingMessage, OutgoingMessage, Server, ServerResponse } from "node:http";
 import { ApiRoutes, ApiSchema } from "./api.js";
 import { Router } from "./router.js";
@@ -106,8 +106,8 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> i
 	private port: string | number = 3001;
 	private host: string = "127.0.0.1";
 
-	constructor() {
-		super();
+	constructor(app: App) {
+		super(app);
 		this.server = createServer(this.onRequest.bind(this));
 		this.server.on("upgrade", (req, socket, head) => {
 			this.onUpgradeHandlers.forEach(handler => handler(req, socket, head));
@@ -144,6 +144,9 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> i
 		}
 
 		const controller = new handler.controller();
+		
+		this.app.injectServices(controller);
+
 		const fn = (controller[handler.key as keyof typeof controller] as Function).bind(controller);
 		try {
 			const args = await Promise.all(handler.extractors.map(e => {
@@ -301,8 +304,6 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> i
 			key: "get",
 			path: api.path
 		});
-
-		console.log(JSON.stringify(apiSchema, null, 4));
 	}
 
 	override start(): void | Promise<void> {

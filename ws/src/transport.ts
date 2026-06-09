@@ -2,15 +2,42 @@ import { Transport, UpgradableTransport } from "@ion/core";
 import { createHash } from "node:crypto";
 import { IncomingMessage } from "node:http";
 import Stream from "node:stream";
+import { Socket } from "./socket.js";
+import { ClientEvents, WsSchema } from "./schema.js";
 
 type UpgradeArgs = [req: IncomingMessage, socket: Stream.Duplex, head: Buffer<ArrayBuffer>];
 
 export type WsConfig = {
 	server: UpgradableTransport<UpgradeArgs>;
+	schema: WsSchema;
 };
+
+type WsRoute = {
+	controller: WsControllerCtor;
+	args: any[];
+	key: string;
+	event: keyof ClientEvents;
+}
 
 export class WsTransport extends Transport<any, any> {
 	private static readonly GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+	private static readonly routes = new Map<keyof ClientEvents, WsRoute>();
+
+	public static readonly registerRoute = <K extends keyof ClientEvents>(event: K, controller: WsControllerCtor, key: string, args: any[]) => {
+		if (this.routes.has(event))
+			throw new Error(`Duplicate web socket route for ${event}!`);
+		WsTransport.routes.set(event, {
+			controller,
+			key,
+			args,
+			event
+		});
+	}
+
+	public static readonly getRoute = <K extends keyof ClientEvents>(event: K) => {
+		return WsTransport.routes.get(event) || null;
+	}
 
 	private readonly sockets: Set<Socket> = new Set();
 
@@ -27,10 +54,8 @@ export class WsTransport extends Transport<any, any> {
 	}
 
 	private readonly onUpgrade = (req: IncomingMessage, socket: Stream.Duplex, _head: Buffer<ArrayBuffer>) => {
-		console.log("Upgrade request received");
-
 		const reject = (reason: string) => {
-			console.log(reason);
+			console.error(reason);
 			socket.destroy();
 		}
 
@@ -59,18 +84,11 @@ export class WsTransport extends Transport<any, any> {
 			"\r\n"
 		);
 
-		socket.on("data", (buf) => {
-			console.log("WS frame data:", buf);
-		});
-
 		const s = new Socket(this.idCounter++, this, socket);
 
 		this.sockets.add(s);
 
-		s.broadcast(`client ${s.id} connected!`);
-
 		socket.on("end", () => {
-			s.broadcast(`client ${s.id} disconnected!`);
 			this.sockets.delete(s);
 		});
 	}
@@ -110,39 +128,18 @@ export class WsTransport extends Transport<any, any> {
 	}
 }
 
-export class Socket {
-	public readonly id: number;
-	
-	private readonly ws: WsTransport;
-	private readonly socket: Stream.Duplex;
-
-	public constructor(id: number, ws: WsTransport, socket: Stream.Duplex) {
-		this.id = id;
-		this.ws = ws;
-		this.socket = socket;
-	}
-
-	public readonly write = (buffer: Buffer<ArrayBuffer>) => this.socket.write(buffer);
-
-	public readonly send = (value: any) => {
-		const val = typeof value === "string" ? value : JSON.stringify(value);
-		this.socket.write(WsTransport.encodeStringFrame(val));
-	}
-
-	public readonly emit = (value: any) => {
-		const val = typeof value === "string" ? value : JSON.stringify(value);
-		this.ws.emit(WsTransport.encodeStringFrame(val));
-	}
-
-	public readonly broadcast = (value: any) => {
-		const val = typeof value === "string" ? value : JSON.stringify(value);
-		this.ws.broadcast(this, WsTransport.encodeStringFrame(val));
-	}
-}
-
-
 
 export const WsController = WsTransport.Controller();
 
 export type WsControllerCtor = typeof WsController;
 export type WsController = InstanceType<typeof WsController>;
+
+export const ws = <K extends keyof ClientEvents, T extends WsController, Key extends keyof T>(event: K) => (target: T, key: Key): MatchMethod<K, T, Key> => {
+	const args = Reflect.getMetadata("design:paramtypes", target, key as any);
+	WsTransport.registerRoute(event, target.constructor as any, key as any, args);
+	return void (0) as any;
+}
+
+export type MatchMethod<K extends keyof ClientEvents, T extends WsController, Key extends keyof T> =
+	[void] extends [ClientEvents[K]] ? void :
+	T[Key] extends (...args: infer Args) => any ? [Args[0]] extends [ClientEvents[K]] ? void : "Invalid arguments!" : "Invalid arguments!";

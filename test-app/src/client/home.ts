@@ -1,5 +1,21 @@
 //import { createRoot, div, h1 } from "./ui.js";
 
+import { ws } from "./ws.js";
+
+ws.on("userOnline", (id) => {
+	console.log("User online ", id);
+});
+
+ws.on("userOffline", (id) => {
+	console.log("User offline ", id);
+});
+
+ws.emit("notifyOnline");
+
+ws.onClose(() => {
+	ws.emit("notifyOffline");
+});
+
 //const state = <T extends {}>(val: T): T => new Proxy(val, {
 //	get(target: any, p) {
 //		return target[p];
@@ -27,23 +43,3 @@
 //};
 
 //createRoot(document.body).render(app);
-
-const ws = new WebSocket("ws://127.0.0.1:3001");
-
-ws.onopen = () => {
-	console.log("connected");
-
-	ws.send("hello server");
-};
-
-ws.onmessage = (event) => {
-	console.log("message from server:", event.data);
-};
-
-ws.onclose = () => {
-	console.log("disconnected");
-};
-
-ws.onerror = (err) => {
-	console.error("ws error", err);
-};

@@ -1,3 +1,5 @@
+import { App } from "./app.js";
+
 export type Context<I, O> = {
 	readonly input: I;
 	readonly output: O;
@@ -11,17 +13,17 @@ const EXTRACTORS = Symbol();
 export abstract class Transport<I, O> {
 	declare protected readonly [INPUT_TAG]: I;
 	declare protected readonly [OUTPUT_TAG]: O;
-
-	public static Controller<T extends Transport<any, any>,>(this: new () => T): TransportControllerCtor<T> {
+	
+	public static Controller<T extends Transport<any, any>,>(this: new (app: App) => T): TransportControllerCtor<T> {
 		const className = `${this.name}Controller`;
 		const classObjects: { [key: typeof className]: TransportControllerCtor<T> } = {
 			[className]: class extends Controller<any, any> { } as any
 		};
 		return classObjects[className]!;
 	}
-
+	
 	// creates a parameter decorators that extracts and returns data from the input
-	public static createExtractor<T extends Transport<any, any>, Args extends any[]>(this: new () => T, extractor: Extractor<T, Args>): ExtractorDecorator<T, Args> {
+	public static createExtractor<T extends Transport<any, any>, Args extends any[]>(this: new (app: App) => T, extractor: Extractor<T, Args>): ExtractorDecorator<T, Args> {
 		const decorator: ExtractorDecorator<T, Args> = Object.assign((...args: Args) => (target: any, key: any, index: any) => {
 			let extractors = Reflect.getMetadata(EXTRACTORS, target, key);
 			if (extractors === undefined) {
@@ -37,16 +39,18 @@ export abstract class Transport<I, O> {
 		}, {
 			extractor
 		});
-
+		
 		return decorator;
 	}
-
-	public static getExtractors<T extends Transport<any, any>, Target extends TransportController<T>>(this: new () => T, target: Target, key: keyof Target & (string | symbol)): RegisteredExtractor<T, any[]>[] {
+	
+	public static getExtractors<T extends Transport<any, any>, Target extends TransportController<T>>(this: new (app: App) => T, target: Target, key: keyof Target & (string | symbol)): RegisteredExtractor<T, any[]>[] {
 		return Reflect.getMetadata(EXTRACTORS, target, key) || []
 	}
-
-	public constructor() { }
-
+	
+	protected readonly app: App;
+	
+	public constructor(app: App) { this.app = app; }
+	
 	public abstract configure(config?: any): void | Promise<void>;
 	public start(): void | Promise<void> {}
 	public stop(): void | Promise<void> {}

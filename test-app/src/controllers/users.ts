@@ -17,13 +17,11 @@ export class UsersController extends HttpController {
 
 	@post("/")
 	public create(@body() name: string) {
-		console.log(name);
 		return UsersController.users.push({ name }) - 1;
 	}
 
 	@get("/queried")
 	public queried(@query() q: any) {
-		console.log(q);
 		return { q };
 	}
 }

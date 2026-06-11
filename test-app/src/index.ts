@@ -3,6 +3,7 @@ import { HttpTransport } from "@ion/http";
 import { WsTransport } from "@ion/ws";
 import { api } from "./controllers/index.js";
 import { resolve } from "node:path";
+import { wsEndpoint } from "./controllers/ws/index.js";
 //import { IncomingMessage } from "node:http";
 
 export const app = new App();
@@ -26,19 +27,10 @@ const httpServer = app.use(HttpTransport, {
 //	return null;
 //};
 
-//TODO: how to handle multiple paths (and multiple websockets/event schemas)?
 app.use(WsTransport, {
 	server: httpServer,
-	onConnection(_req, _socket) {
-		// optional authenticate and set session
+	endpoints: [wsEndpoint],
 
-		return true;
-	},
-	onClosed(_req, _socket) {
-		//const session = parseSession(req);
-		//if (session)
-			//socket.broadcast("userOffline", { username: session.username });
-	}
 });
 
 await app.start();

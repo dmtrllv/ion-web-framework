@@ -48,7 +48,7 @@ export class ChatService extends Service {
 
 	public sendMessage(roomId: number, user: number, message: string) {
 		// TODO: check if client is a client of the room and has permissions...
-		this.app.emit("broadcastMessage", { chatRoom: roomId, username: "Tod ooo" + user, message });
+		this.app.emit("broadcastMessage", { chatRoom: roomId, username: "Tod ooo" + user, message, userId: 1 });
 	}
 }
 

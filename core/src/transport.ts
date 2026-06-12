@@ -1,4 +1,5 @@
 import { App } from "./app.js";
+import { DomainEvents, EventBinding } from "./events.js";
 
 export type Context<I, O> = {
 	readonly input: I;
@@ -57,11 +58,14 @@ export abstract class Transport<I, O> {
 	public abstract configure(config?: any): void | Promise<void>;
 	public start(): void | Promise<void> { }
 	public stop(): void | Promise<void> { }
+
+	// @ts-ignore
+	public resolveEvent<K extends keyof DomainEvents>(event: K, data: DomainEvents[K], binding: EventBinding<ControllerType<any, I, O>>): void {}
 }
 
-type TransportController<T extends Transport<any, any>> = InstanceType<TransportControllerCtor<T>>;
+export type TransportType<T extends Transport<any, any>> = abstract new (app: App) => T;
 
-export type ControllerType<I, O> = new (transport: Transport<I, O>) => Controller<I, O>;
+type TransportController<T extends Transport<any, any>> = InstanceType<TransportControllerCtor<T>>;
 
 type ExtractorDecorator<T extends Transport<any, any>, Args extends any[]> = (<Target extends TransportController<T>, K extends keyof Target & (string | symbol), I>(...args: Args) => (target: Target, key: K, index: I) => any) & {
 	readonly extractor: Extractor<T, Args>;
@@ -85,11 +89,12 @@ export type RegisteredExtractor<T extends Transport<any, any>, Args extends any[
 
 type InferInput<T> = T extends Transport<infer I, any> ? I : never;
 
-type TransportControllerCtor<T> = T extends Transport<infer I, infer O> ? ControllerCtor<T, I, O> : never;
+type TransportControllerCtor<T> = T extends Transport<infer I, infer O> ? ControllerType<T, I, O> : never;
 
-type ControllerCtor<T extends Transport<I, O>, I, O> = (new () => Controller<I, O> & { transport: T }) & {
+export type ControllerType<T extends Transport<I, O>, I, O> = (new (transport: T) => Controller<I, O>) & {
 	// TODO: Does this work?
-	readonly constructor: ControllerCtor<T, I, O>;
+	readonly constructor: ControllerType<T, I, O>;
+	readonly transport: new (app: App) => T;
 };
 
 export class Controller<I, O> {

@@ -1,12 +1,12 @@
 import { Duplex } from "node:stream";
 import { WsSchema } from "./schema.js";
-import { BIN_FRAME, CLOSE, parseFrame, PING, TEXT_FRAME } from "./frame.js";
+import { BIN_FRAME, CLOSE, encodeStringFrame, parseFrame, PING, TEXT_FRAME } from "./frame.js";
 import { WsEndpoint } from "./endpoint.js";
 import { App } from "@ion/core";
 
 export class Socket<T extends WsSchema = any> {
 	public readonly id: number;
-	
+
 	private readonly app: App;
 	private readonly socket: Duplex;
 	private readonly endpoint: WsEndpoint<any, T>;
@@ -50,16 +50,16 @@ export class Socket<T extends WsSchema = any> {
 					if ("event" in json) {
 						const handler = this.endpoint.resolveClientEventHandler(json.event);
 
-						if(!handler) {
+						if (!handler) {
 							console.error("unknown event", json.event);
 							break;
-						} 
+						}
 
 						const c = new handler.controller();
 						this.app.injectServices(c);
 						(c[handler.key as keyof typeof c] as any)(this, json.data || undefined);
 					}
-				} catch(e) {
+				} catch (e) {
 					console.error(e);
 					console.error("what to do now?");
 				}
@@ -83,4 +83,13 @@ export class Socket<T extends WsSchema = any> {
 		}
 	}
 
+	public readonly send = (buffer: Buffer<ArrayBuffer>) => this.socket.write(buffer);
+
+	public sendJson(value: any) {
+		return this.send(encodeStringFrame(JSON.stringify(value)));
+	}
+
+	public emitEvent(event: string, data: any) {
+		return this.sendJson({ event, data });
+	}
 }

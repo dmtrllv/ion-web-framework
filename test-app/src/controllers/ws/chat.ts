@@ -6,13 +6,6 @@ export class ChatController extends WsController {
 	@service()
 	public readonly chatService!: ChatService;
 
-	// todo: implement
-	// @socket()
-	// public readonly socket: Socket;
-	// and
-	//@session() -> should be defined in core, needs to work for http tooewqa
-	//public readonly session: Session;
-
 	@App.onEvent("broadcastMessage")
 	@serverEvent()
 	public broadcastMessage({ username, message }: DomainEventData<"broadcastMessage">) {
@@ -24,8 +17,6 @@ export class ChatController extends WsController {
 
 	@clientEvent()
 	public message(socket: Socket, message: string) {
-		// todo get room id from socket
-		const roomId = socket.id;
-		this.chatService.sendMessage(roomId, 1, message);
+		this.chatService.sendMessage(0, socket.id, message);
 	}
 }

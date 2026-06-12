@@ -41,14 +41,14 @@ export class ChatService extends Service {
 		room.clients.delete(user);
 
 		// TODO: username...
-		this.app.emit("chatDisconnected", { chatRoom: roomId, username: "Tod ooo" + user })
+		this.app.emit("chatDisconnected", { chatRoom: roomId, username: "Client." + user })
 
 		return true;
 	}
 
 	public sendMessage(roomId: number, user: number, message: string) {
 		// TODO: check if client is a client of the room and has permissions...
-		this.app.emit("broadcastMessage", { chatRoom: roomId, username: "Tod ooo" + user, message, userId: 1 });
+		this.app.emit("broadcastMessage", { chatRoom: roomId, username: "Client." + user, message, userId: 1 });
 	}
 }
 

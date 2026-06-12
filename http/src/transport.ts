@@ -143,7 +143,7 @@ export class HttpTransport extends Transport<IncomingMessage, OutgoingMessage> i
 			return this.resolvePublicPath(url, res);
 		}
 
-		const controller = new handler.controller();
+		const controller = new handler.controller(this);
 		
 		this.app.injectServices(controller);
 

@@ -55,6 +55,7 @@ export class WsClient<T extends WsEndpoint<any, any>> {
 
 export class Socket<T extends WsSchema> {
 	private readonly ws: WebSocket;
+	private readonly eventHandlers: Map<string, Function[]> = new Map();
 
 	public constructor(ws: WebSocket) {
 		this.ws = ws;
@@ -64,8 +65,19 @@ export class Socket<T extends WsSchema> {
 		this.ws.send(JSON.stringify({ event, data }))
 	}
 
-	public on<E extends ServerEvent<T>>(_event: E, _callback: (...args: [ServerEventData<T, E>]) => any) {
+	public on<E extends ServerEvent<T>>(event: E, callback: (...args: [ServerEventData<T, E>]) => any) {
+		if(!this.eventHandlers.has(event)) {
+			this.eventHandlers.set(event, []);
+		}
+		this.eventHandlers.get(event)!.push(callback);
+	}
 
+	public remove<E extends ServerEvent<T>>(event: E, callback: (...args: [ServerEventData<T, E>]) => any) {
+		const handlers = this.eventHandlers.get(event) || [];
+		const i = handlers.indexOf(callback);
+		if(i > -1) {
+			handlers.splice(i, 1);
+		}
 	}
 
 	public close(code?: number, reason?: string) {
@@ -73,7 +85,20 @@ export class Socket<T extends WsSchema> {
 	}
 
 	public onMessage(data: string | Buffer<ArrayBuffer>) {
-		console.log(data);
+		if(typeof data === "string") {
+			try {
+				const json = JSON.parse(data);
+				if("event" in json) {
+					this.eventHandlers.get(json.event)?.forEach(handler => {
+						handler(json.data);
+					});
+				}
+			} catch {
+				console.warn("Could not parse websocket data!");
+			}
+		} else {
+			console.warn("TODO parse binary blob?");
+		}
 	}
 }
 

@@ -3,13 +3,16 @@ import { WsSchema } from "./schema.js";
 import { Socket } from "./socket.js";
 import { Duplex } from "stream";
 import { ClientEvent, ServerEvent } from "./client.js";
-import { WsControllerType, WsTransport } from "./transport.js";
-import { App } from "@ion/core";
+import { BROADCAST, EMIT, SEND, ServerEventResponse, WsController, WsControllerType, WsTransport } from "./transport.js";
+import { App, ControllerType, EventBinding } from "@ion/core";
 
 export class WsEndpoint<Path extends string, T extends WsSchema> {
 
 	public readonly path: Path;
+	public readonly schema: T;
 	public readonly eventHandlers: EventHandlers<T>;
+
+	private readonly namespaceMap = new Map<WsControllerType<any>, string>();
 	//public readonly eventEmitters: EventEmitters<T>;
 
 	private readonly sockets: Map<number, Socket> = new Map();
@@ -19,6 +22,7 @@ export class WsEndpoint<Path extends string, T extends WsSchema> {
 
 	public constructor(path: Path, schema: T, onConnectionCallback: ConnectionCallback = () => true) {
 		this.path = path;
+		this.schema = schema;
 		this.eventHandlers = this.resolveEventHandlers(schema);
 		//this.eventEmitters = this.resolveEventEmitters(schema);
 		this.onConnection = onConnectionCallback;
@@ -34,6 +38,7 @@ export class WsEndpoint<Path extends string, T extends WsSchema> {
 					const event = [...prefixes, key].join(".");
 					flat[event] = { controller: target, key }
 				});
+				this.namespaceMap.set(target, prefixes.join("."));
 			} else {
 				for (const k in target) {
 					walk([...prefixes, k], target[k] as WsSchema);
@@ -68,12 +73,23 @@ export class WsEndpoint<Path extends string, T extends WsSchema> {
 	//	return flat as EventEmitters<T>;
 	//}
 
+	private resolveControllerNamespace(controller: WsControllerType<any>) {
+		const namespace = this.namespaceMap.get(controller);
+		if (!namespace)
+			throw new Error(`Could not get namespace for WsController ${controller.name}!`);
+		return namespace;
+	}
+
+	private resolveEventName(controller: WsControllerType<any>, method: string) {
+		return [this.resolveControllerNamespace(controller), method].join(".");
+	}
 
 	public async connect(app: App, req: IncomingMessage, socket: Duplex, head: Buffer<ArrayBuffer>): Promise<boolean> {
 		if (!await this.onConnection(req, socket, head))
 			return false;
 		const id = this.socketIdCounter++;
 		this.sockets.set(id, new Socket(app, id, socket, this));
+		socket.on("close", () => { this.sockets.delete(id); });
 		return true;
 	}
 
@@ -81,13 +97,25 @@ export class WsEndpoint<Path extends string, T extends WsSchema> {
 		return this.eventHandlers[event];
 	}
 
-	//public resolveServerEventEmitter(event: ServerEvent<T>): EventHandler {
-	//	return this.eventEmitters[event];
-	//}
+	public async resolveServerEvent(c: WsController, data: any, { controller, method }: EventBinding<ControllerType<WsTransport, IncomingMessage, never>>) {
+		const eventName = this.resolveEventName(controller, method);
+		const result = await (c[method] as Function)(data) as ServerEventResponse<any>;
+		switch (result.type) {
+			case SEND:
+				result.target.emitEvent(eventName, data);
+				break;
+			case EMIT:
+				this.sockets.forEach(s => s.emitEvent(eventName, data));
+				break;
+			case BROADCAST:
+				this.sockets.forEach(s => (s !== result.source) && s.emitEvent(eventName, data))
+				break;
+		}
+	}
 }
 
-export type EventHandlers<T extends WsSchema> = Record<ClientEvent<T>, any>;
-export type EventEmitters<T extends WsSchema> = Record<ServerEvent<T>, any>;
+export type EventHandlers<T extends WsSchema> = Record<ClientEvent<T>, EventHandler>;
+export type EventEmitters<T extends WsSchema> = Record<ServerEvent<T>, EventHandler>;
 
 type EventHandler = {
 	controller: WsControllerType<any>;

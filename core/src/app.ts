@@ -1,22 +1,26 @@
-import { Controller, ControllerType, Transport } from "./transport.js";
-import type { DomainEvents } from "./events.js";
+import { Controller, ControllerType, Transport, TransportType } from "./transport.js";
+import type { DomainEvents, EventBinding } from "./events.js";
 import { Service, ServiceType } from "./service.js";
 
-type EventListener = {
-	type: ControllerType<any, any>;
-	key: string;
-};
-
 export class App {
-	private static readonly eventListeners = new Map<keyof DomainEvents, EventListener[]>();
+	private static readonly eventBindings = new Map<string, Map<TransportType<any>, EventBinding<any>[]>>();
 
-	public static readonly onEvent = <K extends keyof DomainEvents, Target extends Controller<any, any>, Key extends keyof Target>(event: K) => (target: Target, key: Key) => {
-		if (!this.eventListeners.has(event)) {
-			this.eventListeners.set(event, []);
+	public static readonly onEvent = <K extends keyof DomainEvents, Target extends Controller<any, any>, Key extends keyof Target>(event: K) => (target: Target, method: Key) => {
+		const controller = target.constructor as ControllerType<any, any, any>;
+
+		if (!this.eventBindings.has(event)) {
+			this.eventBindings.set(event, new Map());
 		}
-		this.eventListeners.get(event)!.push({
-			key: key.toString(),
-			type: target.constructor as any
+
+		const bindings = this.eventBindings.get(event)!;
+
+		if (!bindings.has(controller.transport)) {
+			bindings.set(controller.transport, []);
+		}
+
+		bindings.get(controller.transport)!.push({
+			method,
+			controller
 		});
 	}
 
@@ -82,19 +86,14 @@ export class App {
 	}
 
 	public emit<K extends keyof DomainEvents>(event: K, ...[data]: EmitDomainEventArgs<K>) {
-		const listeners = App.eventListeners.get(event) || [];
-		listeners.forEach(({ type, key }) => {
-			const transport = this.getTransport((type as any)["transport"]);
-			const target = new type(transport);
-			this.injectServices(target);
-			const fn = target[key as keyof typeof target] as Function;
-			fn.apply(target, [data]);
-		})
+		const transports = App.eventBindings.get(event);
+		transports?.entries().forEach(([transportType, bindings]) => {
+			const transport = this.getTransport(transportType) as Transport<any, any>;
+			bindings.forEach(binding => transport.resolveEvent(event, data, binding));
+		});
 	}
 }
 
 type EmitDomainEventArgs<T extends keyof DomainEvents> = [data: DomainEvents[T]];
-
-type TransportType<T extends Transport<any, any>> = abstract new (app: App) => T;
 
 type UseTransportArgs<T extends Transport<any, any>> = [TransportType<T>, ...Parameters<T["configure"]>];

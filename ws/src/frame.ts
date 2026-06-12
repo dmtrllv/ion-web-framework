@@ -44,6 +44,32 @@ export const parseFrame = (frame: Buffer<ArrayBuffer>): Frame => {
 	return { fin, op: createOp(op), payload };
 };
 
+export const encodeStringFrame = (str: string) => {
+	const payload = Buffer.from(str);
+	const len = payload.length;
+
+	let header;
+
+	if (len < 126) {
+		header = Buffer.alloc(2);
+		header[0] = 0x81;
+
+		header[1] = len;
+	} else if (len < 65536) {
+		header = Buffer.alloc(4);
+		header[0] = 0x81;
+		header[1] = 126;
+		header.writeUInt16BE(len, 2);
+	} else {
+		header = Buffer.alloc(10);
+		header[0] = 0x81;
+		header[1] = 127;
+		header.writeBigUInt64BE(BigInt(len), 2);
+	}
+
+	return Buffer.concat([header, payload]);
+};
+
 export type Frame = {
 	readonly fin: boolean;
 	readonly op: Op<number>;

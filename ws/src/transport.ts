@@ -1,4 +1,4 @@
-import { Transport, UpgradableTransport } from "@ion/core";
+import { ControllerType, DomainEvents, EventBinding, Transport, UpgradableTransport } from "@ion/core";
 import { createHash } from "node:crypto";
 import { IncomingMessage } from "node:http";
 import { Duplex } from "node:stream";
@@ -55,17 +55,40 @@ export class WsTransport extends Transport<IncomingMessage, never> {
 			.digest("base64");
 	}
 
-	//@ts-ignore
 	private onConnection?: ConnectionHandler;
-	//@ts-ignore
 	private onClosed?: ClosedHandler;
 
 	private readonly endpoints: Map<string, WsEndpoint<any, any>> = new Map();
 
+	private readonly endpointControllerMap = new Map<WsControllerType<any>, WsEndpoint<any, any>[]>();
+
 	public override configure(config: WsTransportConfig): void | Promise<void> {
+		this.configureEndpoints(config.endpoints);
+
 		config.server.onUpgrade(this.onUpgrade);
-		const e = Array.isArray(config.endpoints) ? config.endpoints : [config.endpoints];
-		e.forEach(e => this.endpoints.set(e.path, e));
+
+		if (config.onConnection)
+			this.onConnection = config.onConnection;
+
+		if (config.onClosed)
+			this.onClosed = config.onClosed;
+	}
+
+	private configureEndpoints(endpoints: WsEndpoint<any, any> | WsEndpoint<any, any>[]) {
+		if (!Array.isArray(endpoints))
+			endpoints = [endpoints];
+
+		for (const endpoint of endpoints) {
+			this.endpoints.set(endpoint.path, endpoint);
+			for (const event in endpoint.eventHandlers) {
+				const key = event as keyof typeof endpoint.eventHandlers;
+				const handler = endpoint.eventHandlers[key]!;
+				if (!this.endpointControllerMap.has(handler.controller)) {
+					this.endpointControllerMap.set(handler.controller, []);
+				}
+				this.endpointControllerMap.get(handler.controller)!.push(endpoint);
+			}
+		}
 	}
 
 	private readonly onUpgrade = async (req: IncomingMessage, socket: Duplex, head: Buffer<ArrayBuffer>) => {
@@ -105,6 +128,10 @@ export class WsTransport extends Transport<IncomingMessage, never> {
 			return reject("Not allowed to connect!");
 		}
 
+		socket.on("close", () => {
+			this.onClosed && this.onClosed(req, socket);
+		});
+
 		const acceptKey = WsTransport.createAcceptValue(key);
 
 		socket.write(
@@ -114,6 +141,14 @@ export class WsTransport extends Transport<IncomingMessage, never> {
 			`Sec-WebSocket-Accept: ${acceptKey}\r\n` +
 			"\r\n"
 		);
+	}
+
+	override async resolveEvent<K extends keyof DomainEvents>(_event: K, data: DomainEvents[K], binding: EventBinding<ControllerType<WsTransport, IncomingMessage, never>>) {
+		const controller = new binding.controller(this);
+		this.app.injectServices(controller);
+		//const result = (await (controller[binding.method] as Function)(data)) as Awaited<ServerEventResponse<any>>;
+		const endpoints = this.endpointControllerMap.get(binding.controller) || [];
+		endpoints.map(e => e.resolveServerEvent(controller, data, binding));
 	}
 }
 
@@ -134,17 +169,17 @@ export type WsTransportConfig = {
 };
 
 type ConnectionHandler = (req: IncomingMessage, socket: Duplex) => boolean | Promise<boolean>;
-type ClosedHandler = (req: IncomingMessage, socket: Socket<any>) => void | Promise<void>;
+type ClosedHandler = (req: IncomingMessage, socket: Duplex) => void | Promise<void>;
 
 
 export const serverEvent = WsTransport.serverEvent;
 export const clientEvent = WsTransport.clientEvent;
 
-type ServerEventCheck<T extends WsController, K extends keyof T> = T[K] extends (...args: any[]) => ServerEventResponse<any> ? void : "ERROR!?!?";
+type ServerEventCheck<T extends WsController, K extends keyof T> = T[K] extends (...args: any[]) => (ServerEventResponse<any> | Promise<ServerEventResponse<any>>) ? void : "ERROR!?!?";
 
 type ClientEventCheck<T extends WsController, K extends keyof T> = T[K] extends (socket: Socket, ...args: any[]) => (void | Promise<void>) ? void : "ERROR!?!?";
 
-export type ServerEventResponse<T> = Emit<T> | Broadcast<T> | Send<T> | Promise<Emit<T> | Broadcast<T> | Send<T>>;
+export type ServerEventResponse<T> = Emit<T> | Broadcast<T> | Send<T>;
 
 export const EMIT = Symbol();
 

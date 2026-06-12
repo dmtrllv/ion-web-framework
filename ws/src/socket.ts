@@ -83,7 +83,11 @@ export class Socket<T extends WsSchema = any> {
 		}
 	}
 
-	public readonly send = (buffer: Buffer<ArrayBuffer>) => this.socket.write(buffer);
+	public readonly send = (buffer: Buffer<ArrayBuffer>) => {
+		if (!this.socket.closed)
+			this.socket.write(buffer)
+		
+	};
 
 	public sendJson(value: any) {
 		return this.send(encodeStringFrame(JSON.stringify(value)));

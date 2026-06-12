@@ -1,10 +1,23 @@
-import { Controller, Transport } from "./transport.js";
+import { Controller, ControllerType, Transport } from "./transport.js";
 import type { DomainEvents } from "./events.js";
 import { Service, ServiceType } from "./service.js";
 
+type EventListener = {
+	type: ControllerType<any, any>;
+	key: string;
+};
+
 export class App {
-	public static readonly onEvent = <K extends keyof DomainEvents, Target extends Service | Controller<any, any>, Key extends keyof Target>(event: K) => (target: Target, key: Key) => {
-		console.log(event, target, key);
+	private static readonly eventListeners = new Map<keyof DomainEvents, EventListener[]>();
+
+	public static readonly onEvent = <K extends keyof DomainEvents, Target extends Controller<any, any>, Key extends keyof Target>(event: K) => (target: Target, key: Key) => {
+		if (!this.eventListeners.has(event)) {
+			this.eventListeners.set(event, []);
+		}
+		this.eventListeners.get(event)!.push({
+			key: key.toString(),
+			type: target.constructor as any
+		});
 	}
 
 	private readonly transports = new Map<TransportType<any>, [Transport<any, any>, any]>();
@@ -68,7 +81,16 @@ export class App {
 		await Promise.all(this.transports.values().map(([transport]) => transport.stop()));
 	}
 
-	public emit<K extends keyof DomainEvents>(event: K, ...[data]: EmitDomainEventArgs<K>) { console.log(event, data) }
+	public emit<K extends keyof DomainEvents>(event: K, ...[data]: EmitDomainEventArgs<K>) {
+		const listeners = App.eventListeners.get(event) || [];
+		listeners.forEach(({ type, key }) => {
+			const transport = this.getTransport((type as any)["transport"]);
+			const target = new type(transport);
+			this.injectServices(target);
+			const fn = target[key as keyof typeof target] as Function;
+			fn.apply(target, [data]);
+		})
+	}
 }
 
 type EmitDomainEventArgs<T extends keyof DomainEvents> = [data: DomainEvents[T]];

@@ -1,9 +1,9 @@
-//import { ws } from "./ws.js";
+import { ws } from "./ws.js";
 
-//ws.on("userOnline", (id) => {
-//	console.log("User online ", id);
-//});
+const socket = await ws.connect();
 
-//ws.on("userOffline", (id) => {
-//	console.log("User offline ", id);
-//});
+socket.on("chat.broadcastMessage", ({ username, message }) => {
+	console.log(`${username}: ${message}`);
+});
+
+socket.emit("chat.message", "Hello world!");

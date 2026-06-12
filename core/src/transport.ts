@@ -13,15 +13,18 @@ const EXTRACTORS = Symbol();
 export abstract class Transport<I, O> {
 	declare protected readonly [INPUT_TAG]: I;
 	declare protected readonly [OUTPUT_TAG]: O;
-	
-	public static Controller<T extends Transport<any, any>,StaticProps extends {} = {}>(this: new (app: App) => T, staticProps: StaticProps = {} as any): TransportControllerCtor<T> & StaticProps {
+
+	public static Controller<T extends Transport<any, any>, StaticProps extends {} = {}>(this: new (app: App) => T, staticProps: StaticProps = {} as any): TransportControllerCtor<T> & StaticProps {
+		const TransportClass = this;
 		const className = `${this.name}Controller`;
 		const classObjects: { [key: typeof className]: TransportControllerCtor<T> } = {
-			[className]: class extends Controller<any, any> { } as any
+			[className]: class extends Controller<any, any> {
+				public static readonly transport = TransportClass;
+			} as any
 		};
 		return Object.assign(classObjects[className]!, staticProps);
 	}
-	
+
 	// creates a parameter decorators that extracts and returns data from the input
 	public static createExtractor<T extends Transport<any, any>, Args extends any[]>(this: new (app: App) => T, extractor: Extractor<T, Args>): ExtractorDecorator<T, Args> {
 		const decorator: ExtractorDecorator<T, Args> = Object.assign((...args: Args) => (target: any, key: any, index: any) => {
@@ -39,21 +42,21 @@ export abstract class Transport<I, O> {
 		}, {
 			extractor
 		});
-		
+
 		return decorator;
 	}
-	
+
 	public static getExtractors<T extends Transport<any, any>, Target extends TransportController<T>>(this: new (app: App) => T, target: Target, key: keyof Target & (string | symbol)): RegisteredExtractor<T, any[]>[] {
 		return Reflect.getMetadata(EXTRACTORS, target, key) || []
 	}
-	
+
 	protected readonly app: App;
-	
+
 	public constructor(app: App) { this.app = app; }
-	
+
 	public abstract configure(config?: any): void | Promise<void>;
-	public start(): void | Promise<void> {}
-	public stop(): void | Promise<void> {}
+	public start(): void | Promise<void> { }
+	public stop(): void | Promise<void> { }
 }
 
 type TransportController<T extends Transport<any, any>> = InstanceType<TransportControllerCtor<T>>;

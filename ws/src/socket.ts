@@ -3,6 +3,7 @@ import { WsSchema } from "./schema.js";
 import { BIN_FRAME, CLOSE, encodeStringFrame, parseFrame, PING, TEXT_FRAME } from "./frame.js";
 import { WsEndpoint } from "./endpoint.js";
 import { App } from "@ion/core";
+import { WsContext, WsContextType } from "./context.js";
 
 export class Socket<T extends WsSchema = any> {
 	public readonly id: number;
@@ -10,6 +11,7 @@ export class Socket<T extends WsSchema = any> {
 	private readonly app: App;
 	private readonly socket: Duplex;
 	private readonly endpoint: WsEndpoint<any, T>;
+	private readonly contexts = new Map<WsContextType<any>, WsContext>();
 
 	public constructor(app: App, id: number, socket: Duplex, endpoint: WsEndpoint<any, T>) {
 		this.app = app;
@@ -57,7 +59,7 @@ export class Socket<T extends WsSchema = any> {
 
 						const c = new handler.controller();
 						this.app.injectServices(c);
-						(c[handler.key as keyof typeof c] as any)(this, json.data || undefined);
+						(c[handler.key as keyof typeof c] as any)(this.app.connectionRegistry.get(this.id), json.data || undefined);
 					}
 				} catch (e) {
 					console.error(e);
@@ -87,13 +89,20 @@ export class Socket<T extends WsSchema = any> {
 		if (!this.socket.closed)
 			this.socket.write(buffer)
 		
-	};
+	}
 
 	public sendJson(value: any) {
 		return this.send(encodeStringFrame(JSON.stringify(value)));
 	}
 
-	public emitEvent(event: string, data: any) {
+	public emitEvent<E extends string>(event: E, ...[data]: [T[E]]) {
 		return this.sendJson({ event, data });
+	}
+
+	public use<T extends WsContext>(type: WsContextType<T>): T {
+		if(!this.contexts.has(type)) {
+			this.contexts.set(type, new type());
+		}
+		return this.contexts.get(type)! as T;
 	}
 }

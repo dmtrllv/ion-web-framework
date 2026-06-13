@@ -13,7 +13,13 @@
 		"inlineSourceMap": true,
 		"types": [
 			"node"
-		]
+		],
+		"composite": true,
 	},
-	"extends": "@tsconfig/strictest/tsconfig.json"
+	"extends": "@tsconfig/strictest/tsconfig.json",
+	"references": [
+		{
+			"path": "../core",
+		}
+	]
 }

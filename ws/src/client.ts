@@ -1,7 +1,5 @@
 import type { WsEndpoint } from "./endpoint.js";
 import type { WsSchema } from "./schema.js";
-import type { Broadcast, Emit, Send, ServerEventResponse, WsController, WsControllerType } from "./transport.js";
-import type { Socket as ServerSocket } from "./socket.js";
 
 type WsEndpointPath<T extends WsEndpoint<any, any>> = T extends WsEndpoint<infer Path, any> ? Path : never;
 type WsEndpointSchema<T extends WsEndpoint<any, any>> = T extends WsEndpoint<any, infer Schema> ? Schema : never;
@@ -53,7 +51,7 @@ export class WsClient<T extends WsEndpoint<any, any>> {
 	}
 };
 
-export class Socket<T extends WsSchema> {
+export class Socket<_T extends WsSchema> {
 	private readonly ws: WebSocket;
 	private readonly eventHandlers: Map<string, Function[]> = new Map();
 
@@ -61,21 +59,21 @@ export class Socket<T extends WsSchema> {
 		this.ws = ws;
 	}
 
-	public emit<E extends ClientEvent<T>>(event: E, ...[data]: [ClientEventData<T, E>]) {
+	public emit<E extends string>(event: E, data: any) {
 		this.ws.send(JSON.stringify({ event, data }))
 	}
 
-	public on<E extends ServerEvent<T>>(event: E, callback: (...args: [ServerEventData<T, E>]) => any) {
-		if(!this.eventHandlers.has(event)) {
+	public on<E extends string>(event: E, callback: (...args: any) => any) {
+		if (!this.eventHandlers.has(event)) {
 			this.eventHandlers.set(event, []);
 		}
 		this.eventHandlers.get(event)!.push(callback);
 	}
 
-	public remove<E extends ServerEvent<T>>(event: E, callback: (...args: [ServerEventData<T, E>]) => any) {
+	public remove<E extends string>(event: E, callback: (...args: any) => any) {
 		const handlers = this.eventHandlers.get(event) || [];
 		const i = handlers.indexOf(callback);
-		if(i > -1) {
+		if (i > -1) {
 			handlers.splice(i, 1);
 		}
 	}
@@ -85,10 +83,10 @@ export class Socket<T extends WsSchema> {
 	}
 
 	public onMessage(data: string | Buffer<ArrayBuffer>) {
-		if(typeof data === "string") {
+		if (typeof data === "string") {
 			try {
 				const json = JSON.parse(data);
-				if("event" in json) {
+				if ("event" in json) {
 					this.eventHandlers.get(json.event)?.forEach(handler => {
 						handler(json.data);
 					});
@@ -102,42 +100,6 @@ export class Socket<T extends WsSchema> {
 	}
 }
 
-export type ClientEvent<T extends WsSchema> = {
-	[K in keyof T]:
-	K extends string ? (
-		T[K] extends WsControllerType<infer C> ? `${K}.${ClientControllerEvents<C>}` :
-		T[K] extends WsSchema ? `${K}.${ServerEvent<T[K]>}` :
-		never
-	) : never;
-}[keyof T];
-
-type ClientControllerEvents<T extends WsController> = {
-	[K in keyof T]: K extends string ? (
-		T[K] extends (socket: ServerSocket, ...args: any[]) => (void | Promise<void>) ? K : never
-	) : never;
-}[keyof T];
-
-export type ClientEventData<T extends WsSchema, E extends ClientEvent<T>, H = PickHandler<T, E>> = H extends (socket: ServerSocket, ...args: [infer Data, ...any[]]) => (void | Promise<void>) ? Data : never;
-
-export type ServerEvent<T extends WsSchema> = {
-	[K in keyof T]:
-	K extends string ? (
-		T[K] extends WsControllerType<infer C> ? `${K}.${ServerControllerEvents<C>}` :
-		T[K] extends WsSchema ? `${K}.${ServerEvent<T[K]>}` :
-		never
-	) : never;
-}[keyof T];
-
-type ServerControllerEvents<T extends WsController> = {
-	[K in keyof T]: K extends string ? (
-		T[K] extends (...args: any[]) => Emit<any> | Broadcast<any> | Send<any> ? K : never
-	) : never;
-}[keyof T];
-
-type PickHandler<T, E extends string> =
-	T extends WsControllerType<infer C> ? (E extends keyof C ? C[E] : never) :
-	E extends `${infer First}.${infer Rest extends string}` ? (
-		First extends keyof T ? PickHandler<T[First], Rest> : never
-	) : never;
-
-export type ServerEventData<T extends WsSchema | WsControllerType<any>, E extends string, H = PickHandler<T, E>> = H extends (...args: any[]) => ServerEventResponse<infer R> ? R : never;
+export type ServerEventMap<_T extends WsSchema> = {
+	readonly [K: string]: any;
+};

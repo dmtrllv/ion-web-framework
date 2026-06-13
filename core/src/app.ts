@@ -1,6 +1,7 @@
 import { Controller, ControllerType, Transport, TransportType } from "./transport.js";
 import type { DomainEvents, EventBinding } from "./events.js";
 import { Service, ServiceType } from "./service.js";
+import { ConnectionRegistry, EventDispatcher, ConnectionRoute } from "./connection.js";
 
 export class App {
 	private static readonly eventBindings = new Map<string, Map<TransportType<any>, EventBinding<any>[]>>();
@@ -25,6 +26,8 @@ export class App {
 	}
 
 	private readonly transports = new Map<TransportType<any>, [Transport<any, any>, any]>();
+	public readonly connectionRegistry = new ConnectionRegistry<DomainEvents>();
+	private readonly eventDispatcher = new EventDispatcher<DomainEvents>(this.connectionRegistry);
 
 	private readonly services = new Map<ServiceType<any>, Service>();
 
@@ -85,15 +88,11 @@ export class App {
 		await Promise.all(this.transports.values().map(([transport]) => transport.stop()));
 	}
 
-	public emit<K extends keyof DomainEvents>(event: K, ...[data]: EmitDomainEventArgs<K>) {
-		const transports = App.eventBindings.get(event);
-		transports?.entries().forEach(([transportType, bindings]) => {
-			const transport = this.getTransport(transportType) as Transport<any, any>;
-			bindings.forEach(binding => transport.resolveEvent(event, data, binding));
-		});
+
+
+	public emit<K extends keyof DomainEvents>(event: K, data: DomainEvents[K], route: ConnectionRoute) {
+		this.eventDispatcher.emit(event, data, route);
 	}
 }
-
-type EmitDomainEventArgs<T extends keyof DomainEvents> = [data: DomainEvents[T]];
 
 type UseTransportArgs<T extends Transport<any, any>> = [TransportType<T>, ...Parameters<T["configure"]>];

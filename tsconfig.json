@@ -1,0 +1,17 @@
+{
+	"files": [],
+	"references": [
+		{
+			"path": "core"
+		},
+		{
+			"path": "http"
+		},
+		{
+			"path": "ws"
+		},
+		{
+			"path": "test-app"
+		}
+	]
+}

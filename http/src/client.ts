@@ -119,7 +119,7 @@ type ClientController<T extends HttpController> = {
 type ClientHandler<T> = T extends (...args: infer Args) => infer R ? (...args: Args) => ApiResult<R> : never;
 
 export type ApiResult<T> = {
-	data: T;
+	data: Awaited<T>;
 	error: never;
 } | {
 	data: never;

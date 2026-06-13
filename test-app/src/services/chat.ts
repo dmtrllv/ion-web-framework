@@ -1,22 +1,26 @@
-import { Service } from "@ion/core";
+import { Connection, ConnectionRoute, Service } from "@ion/core";
+
+export class RoomId extends ConnectionRoute {}
 
 export class ChatService extends Service {
 	private roomIdCounter = 0;
 	private readonly rooms = new Map<number, ChatRoom>();
 
-	public createChatRoom(owner: number, name: string) {
-		const id = this.roomIdCounter++;
-		this.rooms.set(id, {
-			id,
+	public createChatRoom(owner: number, name: string): number {
+		const roomId = this.roomIdCounter++;
+		this.rooms.set(roomId, new ChatRoom(roomId, owner, name));
+
+		this.app.emit("chatRoomCreated", {
 			owner,
-			name,
-			clients: new Set()
-		});
+			roomId
+		}, );
+
+		return roomId;
 	}
 
-	public removeChatRoom(user: number, id: number) {
+	public removeChatRoom(owner: number, id: number) {
 		const room = this.rooms.get(id);
-		if (room?.owner !== user) {
+		if (!room || room.owner !== owner) {
 			return false;
 		}
 
@@ -25,36 +29,47 @@ export class ChatService extends Service {
 		return true;
 	}
 
-	public connect(user: number, room: number) {
-		return this.rooms.get(room)?.clients.add(user) !== undefined;
+	public connect(conn: Connection<any>, room: number) {
+		if(this.rooms.has(room)) {
+			conn.bind(RoomId.create(room));
+			return true;
+		}
+		return false;
 	}
 
-	public disconnect(user: number, roomId: number) {
+	public disconnect(conn: Connection<any>, roomId: number) {
 		const room = this.rooms.get(roomId);
 
 		if (!room)
 			return false;
 
-		if (!room.clients.has(user))
+		if (!room.connections.has(conn))
 			return false;
 
-		room.clients.delete(user);
+		room.connections.delete(conn);
 
-		// TODO: username...
-		this.app.emit("chatDisconnected", { chatRoom: roomId, username: "Client." + user })
+		this.app.emit("chatDisconnected", { roomId, username: "Client." + conn.id });
 
 		return true;
 	}
 
-	public sendMessage(roomId: number, user: number, message: string) {
-		// TODO: check if client is a client of the room and has permissions...
-		this.app.emit("broadcastMessage", { chatRoom: roomId, username: "Client." + user, message, userId: 1 });
+	public sendMessage(_roomId: number, _user: number, _message: string) {
+		//const room = this.rooms.get(roomId);
+		//if (room) {
+		//	this.app.emit("broadcastMessage", { roomId: roomId, username: "Client." + user, message, userIds: Array.from(room.clients.values()) });
+		//}
 	}
 }
 
-type ChatRoom = {
+class ChatRoom {
 	readonly id: number;
 	readonly owner: number;
 	readonly name: string;
-	readonly clients: Set<number>;
+	readonly connections: Set<Connection<any>> = new Set();
+
+	public constructor(id: number, owner: number, name: string) {
+		this.id = id;
+		this.owner = owner;
+		this.name = name;
+	}
 }

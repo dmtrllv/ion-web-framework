@@ -2,8 +2,7 @@ import { IncomingMessage } from "http";
 import { WsSchema } from "./schema.js";
 import { Socket } from "./socket.js";
 import { Duplex } from "stream";
-import { ClientEvent, ServerEvent } from "./client.js";
-import { BROADCAST, EMIT, SEND, ServerEventResponse, WsController, WsControllerType, WsTransport } from "./transport.js";
+import { ServerEventResponse, WsController, WsControllerType, WsTransport } from "./transport.js";
 import { App, ControllerType, EventBinding } from "@ion/core";
 
 export class WsEndpoint<Path extends string, T extends WsSchema> {
@@ -68,7 +67,7 @@ export class WsEndpoint<Path extends string, T extends WsSchema> {
 			this.sockets.delete(id);
 		});
 		socket.on("error", (err) => {
-			if("code" in err && err.code === "ECONNABORTED") {
+			if ("code" in err && err.code === "ECONNABORTED") {
 				// ?
 			} else {
 				console.log(err);
@@ -77,29 +76,30 @@ export class WsEndpoint<Path extends string, T extends WsSchema> {
 		return true;
 	}
 
-	public resolveClientEventHandler(event: ClientEvent<T>): EventHandler {
-		return this.eventHandlers[event];
+	public resolveClientEventHandler(event: string): EventHandler | null {
+		return this.eventHandlers[event] || null;
 	}
 
 	public async resolveServerEvent(c: WsController, data: any, { controller, method }: EventBinding<ControllerType<WsTransport, IncomingMessage, never>>) {
-		const eventName = this.resolveEventName(controller, method);
+		const eventName = this.resolveEventName(controller, method) as any;
 		const result = await (c[method] as Function)(data) as ServerEventResponse<any>;
-		switch (result.type) {
-			case SEND:
-				result.target.emitEvent(eventName, data);
-				break;
-			case EMIT:
-				this.sockets.forEach(s => s.emitEvent(eventName, data));
-				break;
-			case BROADCAST:
-				this.sockets.forEach(s => (s !== result.source) && s.emitEvent(eventName, data))
-				break;
-		}
+		//switch (result.type) {
+		//	case SEND:
+		//		result.targets.forEach(socket => socket.emitEvent(eventName, data as never));
+		//		break;
+		//	case SEND:
+		//		this.sockets.forEach(s => s.emitEvent(eventName, data as never));
+		//		break;
+		//	case BROADCAST:
+		//		this.sockets.forEach(s => (s !== result.source) && s.emitEvent(eventName, data as never))
+		//		break;
+		//}
+		console.log("todo:", eventName, result)
 	}
 }
 
-export type EventHandlers<T extends WsSchema> = Record<ClientEvent<T>, EventHandler>;
-export type EventEmitters<T extends WsSchema> = Record<ServerEvent<T>, EventHandler>;
+export type EventHandlers<_T extends WsSchema> = Record<string, EventHandler>;
+export type EventEmitters<_T extends WsSchema> = Record<string, EventHandler>;
 
 type EventHandler = {
 	controller: WsControllerType<any>;

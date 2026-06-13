@@ -30,7 +30,6 @@ const httpServer = app.use(HttpTransport, {
 app.use(WsTransport, {
 	server: httpServer,
 	endpoints: [wsEndpoint],
-
 });
 
 await app.start();

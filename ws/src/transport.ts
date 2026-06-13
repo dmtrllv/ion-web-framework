@@ -1,34 +1,13 @@
-import { ControllerType, DomainEvents, EventBinding, Transport, UpgradableTransport } from "@ion/core";
+import { Connection, ControllerType, DomainEvents, EventBinding, Transport, UpgradableTransport } from "@ion/core";
 import { createHash } from "node:crypto";
 import { IncomingMessage } from "node:http";
 import { Duplex } from "node:stream";
 import { Socket } from "./socket.js";
 import { WsEndpoint } from "./endpoint.js";
-
-/**
- * TODO:
- * a way to get endpoints, seperate sockets, session trough decorators
- * this will allow for emitting data back to the clients since after the ws called
- * into the domain/application the origin info is lost and the core will emit events separate
- * from the websockets instances. 
- */
+import { WsConnection } from "./connection.js";
 
 export class WsTransport extends Transport<IncomingMessage, never> {
-	//private static readonly serverEventHandlers = new Map<WsControllerType<any>, string[]>();
 	private static readonly clientEventHandlers = new Map<WsControllerType<any>, string[]>();
-
-	public static readonly serverEvent = <T extends WsController, K extends keyof T>() => (_target: T, _key: K, descriptor: PropertyDescriptor): ServerEventCheck<T, K> => {
-		const original = descriptor.value;
-
-		descriptor.value = async function (this: any, ...args: any[]) {
-			// inject endpoint?
-			const result = await original.apply(this, args);
-			console.log("send event to client ", result, this, args);
-			return result;
-		};
-
-		return descriptor as any as ServerEventCheck<T, K>;
-	}
 
 	public static readonly clientEvent = <T extends WsController, K extends keyof T>() => (target: T, key: K): ClientEventCheck<T, K> => {
 		const ctor = target.constructor as WsControllerType<any>;
@@ -38,10 +17,6 @@ export class WsTransport extends Transport<IncomingMessage, never> {
 		this.clientEventHandlers.get(ctor)!.push(key.toString());
 		return void (0) as ClientEventCheck<T, K>;
 	}
-
-	//public static getServerEventHandlers(controller: WsControllerType<any>) {
-	//	return this.serverEventHandlers.get(controller) || [];
-	//}
 
 	public static getClientEventHandlers(controller: WsControllerType<any>) {
 		return this.clientEventHandlers.get(controller) || [];
@@ -124,12 +99,19 @@ export class WsTransport extends Transport<IncomingMessage, never> {
 			}
 		}
 
+		const id = Connection.nextId();
+		const s = new Socket(this.app, id, socket, endpoint);
+		const conn = new WsConnection(this.app.connectionRegistry, this, id, s);
+
 		if (!await endpoint.connect(this.app, req, socket, head)) {
 			return reject("Not allowed to connect!");
 		}
 
+		this.app.connectionRegistry.add(conn);
+
 		socket.on("close", () => {
 			this.onClosed && this.onClosed(req, socket);
+			this.app.connectionRegistry.remove(id);
 		});
 
 		const acceptKey = WsTransport.createAcceptValue(key);
@@ -146,16 +128,19 @@ export class WsTransport extends Transport<IncomingMessage, never> {
 	override async resolveEvent<K extends keyof DomainEvents>(_event: K, data: DomainEvents[K], binding: EventBinding<ControllerType<WsTransport, IncomingMessage, never>>) {
 		const controller = new binding.controller(this);
 		this.app.injectServices(controller);
-		//const result = (await (controller[binding.method] as Function)(data)) as Awaited<ServerEventResponse<any>>;
 		const endpoints = this.endpointControllerMap.get(binding.controller) || [];
 		endpoints.map(e => e.resolveServerEvent(controller, data, binding));
 	}
 }
 
-export const WsController = WsTransport.Controller();
+const WsControllerClass = WsTransport.Controller();
+
+export class WsController extends WsControllerClass {
+
+}
 
 export type WsControllerCtor = typeof WsController;
-export type WsController = InstanceType<typeof WsController>;
+//export type WsController = InstanceType<typeof WsController>;
 export type WsControllerType<T extends WsController> = new (...args: any[]) => T;
 
 
@@ -172,38 +157,14 @@ type ConnectionHandler = (req: IncomingMessage, socket: Duplex) => boolean | Pro
 type ClosedHandler = (req: IncomingMessage, socket: Duplex) => void | Promise<void>;
 
 
-export const serverEvent = WsTransport.serverEvent;
 export const clientEvent = WsTransport.clientEvent;
 
-type ServerEventCheck<T extends WsController, K extends keyof T> = T[K] extends (...args: any[]) => (ServerEventResponse<any> | Promise<ServerEventResponse<any>>) ? void : "ERROR!?!?";
-
-type ClientEventCheck<T extends WsController, K extends keyof T> = T[K] extends (socket: Socket, ...args: any[]) => (void | Promise<void>) ? void : "ERROR!?!?";
-
-export type ServerEventResponse<T> = Emit<T> | Broadcast<T> | Send<T>;
-
-export const EMIT = Symbol();
-
-export type Emit<T> = {
-	type: typeof EMIT;
-	data: T;
-};
-
-export const BROADCAST = Symbol();
-
-export type Broadcast<T> = {
-	type: typeof BROADCAST;
-	source: Socket;
-	data: T;
-};
+type ClientEventCheck<T extends WsController, K extends keyof T> = T[K] extends (connection: WsConnection<any>, ...args: any[]) => (void | Promise<void>) ? void : "ERROR!?!?";
 
 export const SEND = Symbol();
 
-export type Send<T> = {
-	type: typeof SEND;
-	target: Socket;
-	data: T;
+export type ServerEventResponse<T> = {
+	readonly [SEND]: T;
 };
 
-export const emit = <T>(data: T): Emit<T> => ({ data, type: EMIT });
-export const broadcast = <T>(source: Socket, data: T): Broadcast<T> => ({ source, data, type: BROADCAST });
-export const send = <T>(target: Socket, data: T): Send<T> => ({ target, data, type: SEND });
+export const send = <T>(data: T): ServerEventResponse<T> => ({ [SEND]: data });

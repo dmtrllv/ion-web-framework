@@ -2,11 +2,6 @@ import { App } from "./app.js";
 import { Connection } from "./connection.js";
 import { DomainEvents, EventBinding } from "./events.js";
 
-export type Context<I, O> = {
-	readonly input: I;
-	readonly output: O;
-}
-
 declare const INPUT_TAG: unique symbol;
 declare const OUTPUT_TAG: unique symbol;
 

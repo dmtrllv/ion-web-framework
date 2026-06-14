@@ -103,7 +103,7 @@ export class WsTransport extends Transport<IncomingMessage, never> {
 		const s = new Socket(this.app, id, socket, endpoint);
 		const conn = new WsConnection(this.app.connectionRegistry, this, id, s);
 
-		if (!await endpoint.connect(req, id, s, head)) {
+		if (!await endpoint.connect(req, id, s, head, conn)) {
 			return reject("Not allowed to connect!");
 		}
 

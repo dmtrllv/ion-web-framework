@@ -1,4 +1,6 @@
-import { Connection, ConnectionRoute, Service } from "@ion/core";
+import { Connection, ConnectionRoute, Id, Service } from "@ion/core";
+import { User } from "../entities/user.js";
+import { Session } from "../controllers/ws/session.js";
 
 export class RoomId extends ConnectionRoute { }
 
@@ -6,10 +8,10 @@ export class ChatService extends Service {
 	private roomIdCounter = 0;
 	private readonly rooms = new Map<number, ChatRoom>();
 
-	public createChatRoom(owner: number, name: string, roomId: number = this.roomIdCounter): number {
+	public createChatRoom(owner: User, name: string, roomId: number = this.roomIdCounter): number {
 		console.log("Create chat room ", roomId);
 		this.roomIdCounter = roomId + 1;
-		this.rooms.set(roomId, new ChatRoom(roomId, owner, name));
+		this.rooms.set(roomId, new ChatRoom(roomId, owner.id, name));
 		return roomId;
 	}
 
@@ -24,7 +26,7 @@ export class ChatService extends Service {
 		return true;
 	}
 
-	public connect(conn: Connection<any>, user: number, roomId: number) {
+	public connect(conn: Connection<any>, user: User, roomId: number) {
 		console.log("connecting to ", roomId);
 
 		let room = this.rooms.get(roomId);
@@ -34,16 +36,16 @@ export class ChatService extends Service {
 			room = this.rooms.get(roomId);
 		}
 
-		if (room?.connect(conn, () => { this.disconnect(conn, user, roomId) })) {
+		if (room?.connect(conn, () => { this.disconnect(conn, roomId) })) {
 			console.log("connected to ", roomId);
-			this.app.emit("chatConnected", { room: roomId, username: `Client.${user}` });
+			this.app.emit("chatConnected", { room: roomId, username: user.username });
 			return true;
 		}
 
 		return false;
 	}
 
-	public disconnect(conn: Connection<any>, user: number, roomId: number) {
+	public disconnect(conn: Connection<any>, roomId: number) {
 		const room = this.rooms.get(roomId);
 
 		if (!room)
@@ -54,26 +56,29 @@ export class ChatService extends Service {
 
 		room.disconnect(conn);
 
-		this.app.emit("chatDisconnected", { username: `Client.${user}`, room: roomId });
+		const session = conn.use(Session);
+		
+		if (session.user)
+			this.app.emit("chatDisconnected", { username: session.user.username, room: roomId });
 
 		return true;
 	}
 
-	public sendMessage(conn: Connection<any>, roomId: number, user: number, message: string) {
+	public sendMessage(conn: Connection<any>, roomId: number, user: User, message: string) {
 		const room = this.rooms.get(roomId);
 		if (room && room.connections.has(conn)) {
-			this.app.emit("broadcastMessage", { room: roomId, username: "Client." + user, message }, room.id);
+			this.app.emit("broadcastMessage", { room: roomId, username: user.username, message }, room.id);
 		}
 	}
 }
 
 class ChatRoom {
 	readonly id: RoomId;
-	readonly owner: number;
+	readonly owner: Id<User>;
 	readonly name: string;
 	readonly connections: Map<Connection<any>, any> = new Map();
 
-	public constructor(id: number, owner: number, name: string) {
+	public constructor(id: number, owner: Id<User>, name: string) {
 		this.id = RoomId.create(id);
 		this.owner = owner;
 		this.name = name;

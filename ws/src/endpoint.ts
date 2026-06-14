@@ -2,6 +2,7 @@ import { IncomingMessage } from "http";
 import { WsSchema } from "./schema.js";
 import { Socket } from "./socket.js";
 import { WsControllerType, WsTransport } from "./transport.js";
+import { Connection } from "@ion/core";
 
 export class WsEndpoint<Path extends string, T extends WsSchema> {
 	public readonly path: Path;
@@ -58,8 +59,8 @@ export class WsEndpoint<Path extends string, T extends WsSchema> {
 		return [this.resolveControllerNamespace(controller), method].join(".");
 	}
 
-	public async connect(req: IncomingMessage, id: number, socket: Socket<T>, head: Buffer<ArrayBuffer>): Promise<boolean> {
-		if (!await this.onConnection(req, socket, head))
+	public async connect(req: IncomingMessage, id: number, socket: Socket<T>, head: Buffer<ArrayBuffer>, connection: Connection<T>): Promise<boolean> {
+		if (!await this.onConnection(req, socket, head, connection))
 			return false;
 
 		this.sockets.set(id, socket);
@@ -84,4 +85,4 @@ type EventHandler = {
 	key: string;
 };
 
-type ConnectionCallback<T extends WsSchema> = (req: IncomingMessage, socket: Socket<T>, head: Buffer<ArrayBuffer>) => boolean | Promise<boolean>;
+export type ConnectionCallback<T extends WsSchema> = (req: IncomingMessage, socket: Socket<T>, head: Buffer<ArrayBuffer>, connection: Connection<T>) => boolean | Promise<boolean>;

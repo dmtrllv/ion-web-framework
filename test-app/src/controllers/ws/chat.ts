@@ -1,6 +1,7 @@
 import { App, service, type DomainEventData } from "@ion/core";
 import { clientEvent, send, WsConnection, WsController } from "@ion/ws";
 import { ChatService } from "../../services/chat.js";
+import { Session } from "./session.js";
 
 export class ChatController extends WsController {
 	@service()
@@ -23,16 +24,20 @@ export class ChatController extends WsController {
 
 	@clientEvent()
 	public connect(conn: WsConnection<any>, room: number) {
-		this.chatService.connect(conn, conn.id, room);
+		const session = conn.use(Session);
+		if (session.user)
+			this.chatService.connect(conn, session.user, room);
 	}
 
 	@clientEvent()
 	public disconnect(conn: WsConnection<any>, room: number) {
-		this.chatService.disconnect(conn, conn.id, room);
+		this.chatService.disconnect(conn, room);
 	}
 
 	@clientEvent()
 	public message(conn: WsConnection<any>, { room, message }: { room: number, message: string }) {
-		this.chatService.sendMessage(conn, room, conn.id, message);
+		const session = conn.use(Session);
+		if (session.user)
+			this.chatService.sendMessage(conn, room, session.user, message);
 	}
 }

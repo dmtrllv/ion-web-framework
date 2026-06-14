@@ -5,3 +5,4 @@ export * from "./transport.js";
 export * from "./events.js";
 export * from "./service.js";
 export * from "./connection.js";
+export * from "./entity.js";

@@ -31,6 +31,7 @@ export abstract class Connection<T extends Record<string, any>> {
 	public readonly bind: (route: ConnectionRoute) => void;
 	public readonly unbind: (route: ConnectionRoute) => void;
 	private readonly transport: Transport<any, any>;
+	private readonly contexts = new Map<ContextType<any>, Context>();;
 
 	constructor(registry: ConnectionRegistry<T>, transport: Transport<any, any>, id: number) {
 		this.id = id;
@@ -72,6 +73,15 @@ export abstract class Connection<T extends Record<string, any>> {
 
 	public disconnect() {
 		this.eventHandlers.get("disconnect")?.forEach(h => h(this));
+	}
+
+	public use<Ctx extends Context>(context: ContextType<Ctx>, instance?: Ctx): Ctx {
+		if (!this.contexts.has(context))
+			this.contexts.set(context, instance || new context());
+		else if (instance) {
+			console.warn("override?")
+		}
+		return this.contexts.get(context)! as Ctx;
 	}
 }
 
@@ -211,7 +221,7 @@ export class ConnectionRegistry<T extends Record<string, any>> {
 	}
 }
 
-export type EmitTarget = ConnectionRoute | { type: "all" };
+export type EmitTarget = ConnectionRoute | ConnectionRoute[] | { type: "all" };
 
 export class EventDispatcher<T extends Record<string, any>> {
 	private readonly app: App;
@@ -231,7 +241,9 @@ export class EventDispatcher<T extends Record<string, any>> {
 			const transport = this.app.getTransport(type) as Transport<any, any>;
 			if (transport) {
 				let connections: ReadonlyArray<Connection<any>>;
-				if (target instanceof ConnectionRoute) {
+				if (Array.isArray(target)) {
+					connections = target.map(t => this.registry.getByTransportRoute(t, type)).flat();
+				} else if (target instanceof ConnectionRoute) {
 					connections = this.registry.getByTransportRoute(target, type);
 				} else {
 					connections = this.registry.getByTransport(type);
@@ -242,3 +254,7 @@ export class EventDispatcher<T extends Record<string, any>> {
 		}
 	}
 }
+
+export type ContextType<Ctx> = new (...args: any[]) => Ctx;
+
+export abstract class Context { }

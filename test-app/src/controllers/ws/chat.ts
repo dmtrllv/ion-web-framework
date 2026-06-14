@@ -23,22 +23,16 @@ export class ChatController extends WsController {
 
 	@clientEvent()
 	public connect(conn: WsConnection<any>, room: number) {
-		console.log("connect -> ", room);
 		this.chatService.connect(conn, conn.id, room);
 	}
 
 	@clientEvent()
 	public disconnect(conn: WsConnection<any>, room: number) {
-		console.log("disconnect -> ", room);
 		this.chatService.disconnect(conn, conn.id, room);
 	}
 
 	@clientEvent()
 	public message(conn: WsConnection<any>, { room, message }: { room: number, message: string }) {
-		//const user = conn.use(Session)?.user;
-		//if (user) {
-		console.log("message", room, message)
 		this.chatService.sendMessage(conn, room, conn.id, message);
-		//}
 	}
 }

@@ -69,4 +69,5 @@ socket.on("chat.disconnected", ({ username }) => {
 
 document.getElementById("leave")?.addEventListener("click", () => {
 	socket.emit("chat.disconnect", 0);
+	document.body.innerHTML = "<h1>You left the chat</h1>"
 });

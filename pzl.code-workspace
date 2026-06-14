@@ -14,7 +14,8 @@
 			"**/node_modules": true,
 			"**/dist": true,
 			"**/lib": true,
-			"**/types": true
+			"**/types": true,
+			"**/*.tsbuildinfo": true
 		}
 	}
 }

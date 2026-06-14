@@ -1,4 +1,5 @@
 import { App } from "./app.js";
+import { Connection } from "./connection.js";
 import { DomainEvents, EventBinding } from "./events.js";
 
 export type Context<I, O> = {
@@ -60,7 +61,7 @@ export abstract class Transport<I, O> {
 	public stop(): void | Promise<void> { }
 
 	// @ts-ignore
-	public resolveEvent<K extends keyof DomainEvents>(event: K, data: DomainEvents[K], binding: EventBinding<ControllerType<any, I, O>>): void {}
+	public resolveEvent<K extends keyof DomainEvents>(event: K, data: DomainEvents[K], binding: EventBinding<ControllerType<any, I, O>>, connections: ReadonlyArray<Connection<any>>): void { }
 }
 
 export type TransportType<T extends Transport<any, any>> = abstract new (app: App) => T;

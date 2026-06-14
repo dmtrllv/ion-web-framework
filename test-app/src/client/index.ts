@@ -1,7 +1,8 @@
-import { api } from "./api.js";
 import { ws } from "./ws.js";
 
 const socket = await ws.connect();
+
+socket.emit("chat.connect", 0);
 
 let roomId = 0;
 
@@ -27,15 +28,6 @@ const getColor = (user: string) => {
 	return userColorMap[user]!;
 };
 
-const addMessage = (user: string, msg: string) => {
-	if (chat) {
-		const el = document.createElement("div");
-		el.style.color = getColor(user);
-		el.textContent = `${user}: ${msg}`;
-		chat.appendChild(el);
-	}
-};
-
 input?.addEventListener("keydown", (e) => {
 	if (e.code === "Enter") {
 		socket.emit("chat.message", {
@@ -47,13 +39,34 @@ input?.addEventListener("keydown", (e) => {
 });
 
 socket.on("chat.broadcastMessage", ({ username, message }) => {
-	addMessage(username, message);
+	if (chat) {
+		const el = document.createElement("div");
+		el.style.color = getColor(username);
+		el.textContent = `${username}: ${message}`;
+		chat.appendChild(el);
+	}
 });
 
-const room = await api.chat.createRoom({ name: "foo-bar" });
-if (room.data !== undefined) {
-	const x = await api.chat.connect({ roomId: room.data });
-	if (x.data === true) {
-		console.log("connected to room foo-bar with roomId:", room.data);
+socket.on("chat.connected", ({ username }) => {
+	if (chat) {
+		const el = document.createElement("div");
+		el.style.fontSize = "10px";
+		el.style.opacity = "0.75";
+		el.style.color = getColor(username);
+		el.textContent = `${username} connected!`;
+		chat.appendChild(el);
 	}
-}
+});
+socket.on("chat.disconnected", ({ username }) => {
+	if (chat) {
+		const el = document.createElement("div");
+		el.style.fontSize = "10px";
+		el.style.opacity = "0.75";
+		el.textContent = `${username} disconnected!`;
+		chat.appendChild(el);
+	}
+});
+
+document.getElementById("leave")?.addEventListener("click", () => {
+	socket.emit("chat.disconnect", 0);
+});

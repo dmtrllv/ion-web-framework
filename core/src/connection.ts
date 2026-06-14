@@ -1,4 +1,5 @@
-import { Transport } from "./transport.js";
+import { App } from "./app.js";
+import { Transport, TransportType } from "./transport.js";
 
 export abstract class ConnectionRoute {
 	public static create<T extends typeof ConnectionRoute>(this: new (...args: ConstructorParameters<T>) => InstanceType<T>, ...args: ConstructorParameters<T>): InstanceType<T> {
@@ -25,6 +26,8 @@ export abstract class Connection<T extends Record<string, any>> {
 
 	protected readonly routes: Set<ConnectionRoute> = new Set();
 
+	private readonly eventHandlers: Map<keyof ConnectionEvents<T>, Function[]> = new Map();
+
 	public readonly bind: (route: ConnectionRoute) => void;
 	public readonly unbind: (route: ConnectionRoute) => void;
 	private readonly transport: Transport<any, any>;
@@ -49,16 +52,41 @@ export abstract class Connection<T extends Record<string, any>> {
 	public getRoutes(): ConnectionRoute[] {
 		return [...this.routes];
 	}
+
+	public on<K extends keyof ConnectionEvents<T>>(event: K, handler: (...data: ConnectionEvents<T>[K]) => any) {
+		if (!this.eventHandlers.has(event)) {
+			this.eventHandlers.set(event, []);
+		}
+		this.eventHandlers.get(event)!.push(handler);
+	}
+
+	public remove<K extends keyof ConnectionEvents<T>>(event: K, handler: (...data: ConnectionEvents<T>[K]) => any) {
+		const handlers = this.eventHandlers.get(event);
+		if (handlers) {
+			const index = handlers.indexOf(handler);
+			if (index > -1) {
+				handlers.splice(index, 1);
+			}
+		}
+	}
+
+	public disconnect() {
+		this.eventHandlers.get("disconnect")?.forEach(h => h(this));
+	}
+}
+
+export type ConnectionEvents<T extends Record<string, any>> = {
+	disconnect: [connection: Connection<T>];
 }
 
 export class ConnectionRegistry<T extends Record<string, any>> {
-	private connections = new Map<Transport<any, any>, Map<number, Connection<T>>>();
+	private connections = new Map<TransportType<any>, Map<number, Connection<T>>>();
 	private idToConnection = new Map<number, Connection<T>>();
 
 	private indices = new Map<ConnectionRoute, Set<number>>();
 
 	public add(connection: Connection<T>) {
-		const transport = connection["transport"];
+		const transport = connection["transport"].constructor as TransportType<any>;
 		if (!this.connections.has(transport))
 			this.connections.set(transport, new Map())
 
@@ -78,9 +106,12 @@ export class ConnectionRegistry<T extends Record<string, any>> {
 
 	public remove(id: number) {
 		const connection = this.get(id);
-		if(!connection)
+		if (!connection)
 			return;
-		const transport = connection["transport"];
+
+		connection.disconnect();
+
+		const transport = connection["transport"].constructor as TransportType<any>;;
 		const connections = this.connections.get(transport)!;
 
 		for (const route of connection.getRoutes()) {
@@ -119,15 +150,22 @@ export class ConnectionRegistry<T extends Record<string, any>> {
 		return result;
 	}
 
-	public getByTransportRoute(route: ConnectionRoute, transport: Transport<any, any>): Connection<T>[] {
+	public getByTransport(transport: TransportType<any>): Connection<T>[] {
+		const connections = this.connections.get(transport);
+		if (connections)
+			return Array.from(connections.values());
+		return [];
+	}
+
+	public getByTransportRoute(route: ConnectionRoute, transport: TransportType<any>): Connection<T>[] {
 		const ids = this.indices.get(route);
 
 		if (!ids)
 			return [];
 
 		const connections = this.connections.get(transport);
-		
-		if(!connections)
+
+		if (!connections)
 			return [];
 
 		const result: Connection<T>[] = [];
@@ -143,7 +181,7 @@ export class ConnectionRegistry<T extends Record<string, any>> {
 
 	public bindRoute(id: number, route: ConnectionRoute) {
 		const connection = this.get(id);
-		
+
 		if (!connection)
 			return;
 
@@ -176,24 +214,31 @@ export class ConnectionRegistry<T extends Record<string, any>> {
 export type EmitTarget = ConnectionRoute | { type: "all" };
 
 export class EventDispatcher<T extends Record<string, any>> {
-	private readonly registry: ConnectionRegistry<T>
+	private readonly app: App;
+	private readonly registry: ConnectionRegistry<T>;
 
-	public constructor(registry: ConnectionRegistry<T>) {
+	public constructor(app: App, registry: ConnectionRegistry<T>) {
+		this.app = app;
 		this.registry = registry;
 	}
 
 	public emit<K extends keyof T>(event: K, payload: T[K], target: EmitTarget = { type: "all" }) {
-		let connections: Iterable<Connection<T>>;
+		const bindings = App.getEventBindings(event as never);
+		if (!bindings)
+			return;
 
-		if (target instanceof ConnectionRoute) {
-			connections = this.registry.getByRoute(target);
-		} else {
-			connections = this.registry.all();
-		}
+		for (const [type, b] of bindings) {
+			const transport = this.app.getTransport(type) as Transport<any, any>;
+			if (transport) {
+				let connections: ReadonlyArray<Connection<any>>;
+				if (target instanceof ConnectionRoute) {
+					connections = this.registry.getByTransportRoute(target, type);
+				} else {
+					connections = this.registry.getByTransport(type);
+				}
 
-		for (const connection of connections) {
-			// this is not right yet. controllers should be created and then the methods should be called 
-			connection.emit(event, payload);
+				b.forEach(b => transport.resolveEvent(event as never, payload as never, b, connections));
+			}
 		}
 	}
 }

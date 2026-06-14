@@ -1,9 +1,7 @@
 import { IncomingMessage } from "http";
 import { WsSchema } from "./schema.js";
 import { Socket } from "./socket.js";
-import { Duplex } from "stream";
-import { ServerEventResponse, WsController, WsControllerType, WsTransport } from "./transport.js";
-import { App, ControllerType, EventBinding } from "@ion/core";
+import { WsControllerType, WsTransport } from "./transport.js";
 
 export class WsEndpoint<Path extends string, T extends WsSchema> {
 	public readonly path: Path;
@@ -13,15 +11,17 @@ export class WsEndpoint<Path extends string, T extends WsSchema> {
 	private readonly namespaceMap = new Map<WsControllerType<any>, string>();
 
 	private readonly sockets: Map<number, Socket> = new Map();
-	private readonly onConnection: ConnectionCallback;
+	private readonly onConnection: ConnectionCallback<T>;
 
-	private socketIdCounter: number = 0;
-
-	public constructor(path: Path, schema: T, onConnectionCallback: ConnectionCallback = () => true) {
+	public constructor(path: Path, schema: T, onConnectionCallback: ConnectionCallback<T> = () => true) {
 		this.path = path;
 		this.schema = schema;
 		this.eventHandlers = this.resolveEventHandlers(schema);
 		this.onConnection = onConnectionCallback;
+	}
+
+	public hasConnectionId(id: number): boolean {
+		return this.sockets.has(id);
 	}
 
 	private resolveEventHandlers<T extends WsSchema>(schema: T): EventHandlers<T> {
@@ -54,47 +54,25 @@ export class WsEndpoint<Path extends string, T extends WsSchema> {
 		return namespace;
 	}
 
-	private resolveEventName(controller: WsControllerType<any>, method: string) {
+	public resolveEventName(controller: WsControllerType<any>, method: string) {
 		return [this.resolveControllerNamespace(controller), method].join(".");
 	}
 
-	public async connect(app: App, req: IncomingMessage, socket: Duplex, head: Buffer<ArrayBuffer>): Promise<boolean> {
+	public async connect(req: IncomingMessage, id: number, socket: Socket<T>, head: Buffer<ArrayBuffer>): Promise<boolean> {
 		if (!await this.onConnection(req, socket, head))
 			return false;
-		const id = this.socketIdCounter++;
-		this.sockets.set(id, new Socket(app, id, socket, this));
-		socket.on("close", () => {
-			this.sockets.delete(id);
-		});
-		socket.on("error", (err) => {
-			if ("code" in err && err.code === "ECONNABORTED") {
-				// ?
-			} else {
-				console.log(err);
-			}
-		});
+
+		this.sockets.set(id, socket);
+
 		return true;
+	}
+
+	public disconnect(id: number) {
+		this.sockets.delete(id);
 	}
 
 	public resolveClientEventHandler(event: string): EventHandler | null {
 		return this.eventHandlers[event] || null;
-	}
-
-	public async resolveServerEvent(c: WsController, data: any, { controller, method }: EventBinding<ControllerType<WsTransport, IncomingMessage, never>>) {
-		const eventName = this.resolveEventName(controller, method) as any;
-		const result = await (c[method] as Function)(data) as ServerEventResponse<any>;
-		//switch (result.type) {
-		//	case SEND:
-		//		result.targets.forEach(socket => socket.emitEvent(eventName, data as never));
-		//		break;
-		//	case SEND:
-		//		this.sockets.forEach(s => s.emitEvent(eventName, data as never));
-		//		break;
-		//	case BROADCAST:
-		//		this.sockets.forEach(s => (s !== result.source) && s.emitEvent(eventName, data as never))
-		//		break;
-		//}
-		console.log("todo:", eventName, result)
 	}
 }
 
@@ -106,4 +84,4 @@ type EventHandler = {
 	key: string;
 };
 
-type ConnectionCallback = (req: IncomingMessage, socket: Duplex, head: Buffer<ArrayBuffer>) => boolean | Promise<boolean>;
+type ConnectionCallback<T extends WsSchema> = (req: IncomingMessage, socket: Socket<T>, head: Buffer<ArrayBuffer>) => boolean | Promise<boolean>;

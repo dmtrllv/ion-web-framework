@@ -1,7 +1,7 @@
 import { Controller, ControllerType, Transport, TransportType } from "./transport.js";
 import type { DomainEvents, EventBinding } from "./events.js";
 import { Service, ServiceType } from "./service.js";
-import { ConnectionRegistry, EventDispatcher, ConnectionRoute } from "./connection.js";
+import { ConnectionRegistry, EventDispatcher, EmitTarget } from "./connection.js";
 
 export class App {
 	private static readonly eventBindings = new Map<string, Map<TransportType<any>, EventBinding<any>[]>>();
@@ -25,9 +25,13 @@ export class App {
 		});
 	}
 
+	public static getEventBindings = <K extends keyof DomainEvents>(event: K): ReadonlyMap<TransportType<any>, EventBinding<any>[]> | null => {
+		return App.eventBindings.get(event) || null;
+	}
+
 	private readonly transports = new Map<TransportType<any>, [Transport<any, any>, any]>();
 	public readonly connectionRegistry = new ConnectionRegistry<DomainEvents>();
-	private readonly eventDispatcher = new EventDispatcher<DomainEvents>(this.connectionRegistry);
+	private readonly eventDispatcher = new EventDispatcher<DomainEvents>(this, this.connectionRegistry);
 
 	private readonly services = new Map<ServiceType<any>, Service>();
 
@@ -88,10 +92,8 @@ export class App {
 		await Promise.all(this.transports.values().map(([transport]) => transport.stop()));
 	}
 
-
-
-	public emit<K extends keyof DomainEvents>(event: K, data: DomainEvents[K], route: ConnectionRoute) {
-		this.eventDispatcher.emit(event, data, route);
+	public emit<K extends keyof DomainEvents>(event: K, data: DomainEvents[K], target: EmitTarget = { type: "all" }) {
+		this.eventDispatcher.emit(event, data, target);
 	}
 }
 

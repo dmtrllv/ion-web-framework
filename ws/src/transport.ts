@@ -35,7 +35,7 @@ export class WsTransport extends Transport<IncomingMessage, never> {
 
 	private readonly endpoints: Map<string, WsEndpoint<any, any>> = new Map();
 
-	private readonly endpointControllerMap = new Map<WsControllerType<any>, WsEndpoint<any, any>[]>();
+	private readonly endpointControllerMap = new Map<WsControllerType<any>, Set<WsEndpoint<any, any>>>();
 
 	public override configure(config: WsTransportConfig): void | Promise<void> {
 		this.configureEndpoints(config.endpoints);
@@ -59,9 +59,9 @@ export class WsTransport extends Transport<IncomingMessage, never> {
 				const key = event as keyof typeof endpoint.eventHandlers;
 				const handler = endpoint.eventHandlers[key]!;
 				if (!this.endpointControllerMap.has(handler.controller)) {
-					this.endpointControllerMap.set(handler.controller, []);
+					this.endpointControllerMap.set(handler.controller, new Set());
 				}
-				this.endpointControllerMap.get(handler.controller)!.push(endpoint);
+				this.endpointControllerMap.get(handler.controller)!.add(endpoint);
 			}
 		}
 	}
@@ -103,7 +103,7 @@ export class WsTransport extends Transport<IncomingMessage, never> {
 		const s = new Socket(this.app, id, socket, endpoint);
 		const conn = new WsConnection(this.app.connectionRegistry, this, id, s);
 
-		if (!await endpoint.connect(this.app, req, socket, head)) {
+		if (!await endpoint.connect(req, id, s, head)) {
 			return reject("Not allowed to connect!");
 		}
 
@@ -112,24 +112,46 @@ export class WsTransport extends Transport<IncomingMessage, never> {
 		socket.on("close", () => {
 			this.onClosed && this.onClosed(req, socket);
 			this.app.connectionRegistry.remove(id);
+			endpoint.disconnect(id);
 		});
 
-		const acceptKey = WsTransport.createAcceptValue(key);
+		socket.on("error", (err) => {
+			if ("code" in err && err.code === "ECONNABORTED") {
+				// ?
+			} else {
+				console.log(err);
+			}
+		});
 
 		socket.write(
 			"HTTP/1.1 101 Switching Protocols\r\n" +
 			"Upgrade: websocket\r\n" +
 			"Connection: Upgrade\r\n" +
-			`Sec-WebSocket-Accept: ${acceptKey}\r\n` +
+			`Sec-WebSocket-Accept: ${WsTransport.createAcceptValue(key)}\r\n` +
 			"\r\n"
 		);
 	}
 
-	override async resolveEvent<K extends keyof DomainEvents>(_event: K, data: DomainEvents[K], binding: EventBinding<ControllerType<WsTransport, IncomingMessage, never>>) {
+	override async resolveEvent<K extends keyof DomainEvents>(_event: K, data: DomainEvents[K], binding: EventBinding<ControllerType<WsTransport, IncomingMessage, never>>, connections: ReadonlyArray<Connection<any>>) {
+		const endpoints = this.endpointControllerMap.get(binding.controller);
+		if (!endpoints)
+			return;
+
 		const controller = new binding.controller(this);
 		this.app.injectServices(controller);
-		const endpoints = this.endpointControllerMap.get(binding.controller) || [];
-		endpoints.map(e => e.resolveServerEvent(controller, data, binding));
+
+		const result = await (controller[binding.method] as Function)(data) as ServerEventResponse<any>;
+		const eventData = result[SEND]
+
+		endpoints.forEach(e => {
+			connections.forEach(c => {
+				if (e.hasConnectionId(c.id)) {
+					const con = c as WsConnection;
+					const eventName = e.resolveEventName(binding.controller, binding.method);
+					con.emit(eventName, eventData);
+				}
+			});
+		});
 	}
 }
 

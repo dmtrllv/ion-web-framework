@@ -44,6 +44,7 @@ export class Socket<T extends WsSchema = any> {
 
 
 	private onData(op: number, buffer: Buffer<ArrayBufferLike>) {
+		//console.log(op, buffer);
 		switch (op) {
 			case TEXT_FRAME:
 				const data = buffer.toString("utf-8");
@@ -59,7 +60,7 @@ export class Socket<T extends WsSchema = any> {
 
 						const c = new handler.controller();
 						this.app.injectServices(c);
-						(c[handler.key as keyof typeof c] as any)(this.app.connectionRegistry.get(this.id), json.data || undefined);
+						(c[handler.key as keyof typeof c] as any)(this.app.connectionRegistry.get(this.id), json.data);
 					}
 				} catch (e) {
 					console.error(e);
@@ -77,7 +78,7 @@ export class Socket<T extends WsSchema = any> {
 				this.socket.write(frame);
 				break;
 			case CLOSE:
-				console.error(`TODO: handle close!`);
+				this.socket.end();
 				break;
 			default:
 				console.error(`Unknown opcode ${op}!`);
